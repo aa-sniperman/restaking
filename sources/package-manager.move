@@ -5,6 +5,8 @@ module restaking::package_manager {
     use std::string::String;
 
     friend restaking::coin_wrapper;
+    friend restaking::pool_manager;
+    friend restaking::delegation_manager;
 
     /// Stores permission config such as SignerCapability for controlling the resource account.
     struct PermissionConfig has key {
