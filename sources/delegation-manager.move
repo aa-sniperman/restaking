@@ -85,5 +85,5 @@ module restaking::delegation_manager {
         package_manager::address_exists(string::utf8(DELEGATION_MANAGER_NAME))
     }
 
-
+  
 }

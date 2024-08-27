@@ -79,7 +79,7 @@ module restaking::staking_pool {
     new_shares
   }
 
-  public(friend) fun withdraw(pool: Object<StakingPool>, amount_shares: u128): FungibleAsset acquires StakingPool {
+  public(friend) fun withdraw(recipient: address, pool: Object<StakingPool>, amount_shares: u128) acquires StakingPool {
 
     let staking_pool = mut_staking_pool(&pool);
 
@@ -97,17 +97,18 @@ module restaking::staking_pool {
     *total_shares = *total_shares - amount_shares;
 
     let pool_signer = &package_manager::get_signer();
-    let asset = fungible_asset::withdraw(pool_signer, staking_pool.token_store, amount);
+    let withdrawal = fungible_asset::withdraw(pool_signer, staking_pool.token_store, amount);
+
+    let to = ensure_token_store(recipient, pool);
 
     emit_exchange_rate(virtual_balance - amount, *total_shares + SHARES_OFFSET);
 
-    asset
+    fungible_asset::deposit(to, withdrawal);
   }
 
   #[view]
-  public fun total_balance(pool: Object<StakingPool>): u64 acquires StakingPool {
-    let staking_pool = staking_pool(&pool);
-    fungible_asset::balance(staking_pool.token_store)
+  public fun token_store(pool: Object<StakingPool>): Object<FungibleStore> acquires StakingPool {
+    staking_pool(&pool).token_store
   }
 
   #[view]
@@ -116,9 +117,9 @@ module restaking::staking_pool {
     staking_pool.total_shares
   }
   
-  fun ensure_token_store<T: key>(staker: address, pool: Object<T>): Object<FungibleStore> {
-    primary_fungible_store::ensure_primary_store_exists(staker, pool);
-    let store = primary_fungible_store::primary_store(staker, pool);
+  fun ensure_token_store<T: key>(user: address, pool: Object<T>): Object<FungibleStore> {
+    primary_fungible_store::ensure_primary_store_exists(user, pool);
+    let store = primary_fungible_store::primary_store(user, pool);
     store
   }
 

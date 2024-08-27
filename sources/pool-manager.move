@@ -77,12 +77,23 @@ module restaking::pool_manager {
       })
     }
 
-    // public entry fun deposit(staker: &signer, pool: Object<StakingPool>, asset: FungibleAsset) acquires PoolManagerConfigs{
-    //   let token = fungible_asset::metadata_from_asset(&asset);
-    //   let amount = fungible_asset::amount(&asset);
-     
+    public(friend) fun deposit(staker: &signer, pool: Object<StakingPool>, asset: FungibleAsset) acquires PoolManagerConfigs{
+      let store = staking_pool::token_store(pool);
 
-    // }
+      let token = fungible_asset::metadata_from_asset(&asset);
+      let amount = fungible_asset::amount(&asset);
+
+      fungible_asset::deposit(store, asset);
+      let shares = staking_pool::deposit(pool, amount);
+      
+      add_shares(signer::address_of(staker), token, amount);
+
+      // delegation: increase operator shares
+    }
+
+    public(friend) fun withdraw(recipient: address, pool: Object<StakingPool>, shares: u128){
+      staking_pool::withdraw(recipient, pool, shares);
+    }
 
     #[view]
     public fun is_initialized(): bool {
