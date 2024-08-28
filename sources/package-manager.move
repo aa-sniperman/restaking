@@ -50,7 +50,7 @@ module restaking::package_manager {
     /// Can be called by friended modules to keep track of a system address.
     public(friend) fun add_address(name: String, object: address) acquires PermissionConfig {
         let addresses = &mut borrow_global_mut<PermissionConfig>(@restaking).addresses;
-        simple_map::add(addresses, name, object);
+        simple_map::upsert(addresses, name, object);
     }
 
     public entry fun set_owner(owner: &signer, new_owner: address){

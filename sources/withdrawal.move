@@ -27,7 +27,7 @@ module restaking::withdrawal {
   const EWITHDRAWAL_DELAY_NOT_PASSED_YET: u64 = 303;
   const EWITHDRAWAL_INPUT_LENGTH_MISMATCH: u64 = 304;
   const ESENDER_NOT_WITHDRAWER: u64 = 305;
-  const MAX_WITHDRAWAL_DELAY_EXCEEDED: u64 = 306;
+  const EMAX_WITHDRAWAL_DELAY_EXCEEDED: u64 = 306;
 
   struct Withdrawal has drop, store {
     staker: address,
@@ -66,6 +66,12 @@ module restaking::withdrawal {
   #[event]
   struct MinWithdrawalDelaySet has drop, store{
     min_withdrawal_delay: u64,
+  }
+
+  #[event]
+  struct TokenWithdrawalDelaySet has drop, store {
+    token: Object<Metadata>,
+    token_withdrawal_delay: u64,
   }
 
     /// Create the delegation manager account to host staking delegations.
@@ -143,7 +149,7 @@ module restaking::withdrawal {
 
     let withdrawal_root = withdrawal_root(withdrawal);
     let configs = mut_withdrawal_configs();
-    simple_map::add(&mut configs.pending_withdrawals, withdrawal_root, true);
+    simple_map::upsert(&mut configs.pending_withdrawals, withdrawal_root, true);
 
     event::emit(WithdrawalQueued {
       withdrawal_root,
@@ -247,11 +253,23 @@ module restaking::withdrawal {
   // OPERATIONS
   public entry fun set_min_withdrawal_delay(owner: &signer, delay: u64) acquires WithdrawalConfigs{
     package_manager::only_owner(signer::address_of(owner));
-    assert!(delay <= MAX_WITHDRAWAL_DELAY, MAX_WITHDRAWAL_DELAY_EXCEEDED);
+    assert!(delay <= MAX_WITHDRAWAL_DELAY, EMAX_WITHDRAWAL_DELAY_EXCEEDED);
     event::emit(MinWithdrawalDelaySet {
       min_withdrawal_delay: delay
     });
     let configs = mut_withdrawal_configs();
     configs.min_withdrawal_delay = delay;
+  }
+
+  public entry fun set_token_withdrawal_delay(owner: &signer, token: Object<Metadata>, delay: u64) acquires WithdrawalConfigs{
+    package_manager::only_owner(signer::address_of(owner));
+    assert!(delay <= MAX_WITHDRAWAL_DELAY, EMAX_WITHDRAWAL_DELAY_EXCEEDED);
+
+    event::emit(TokenWithdrawalDelaySet {
+      token,
+      token_withdrawal_delay: delay
+    });
+    let configs = mut_withdrawal_configs();
+    simple_map::upsert(&mut configs.token_withdrawal_delay, token, delay);
   }
 }
