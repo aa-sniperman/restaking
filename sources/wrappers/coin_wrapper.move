@@ -63,8 +63,8 @@ module restaking::coin_wrapper {
         };
 
         // derive a resource account from swap signer to manage Wrapper Account
-        let swap_signer = &package_manager::get_signer();
-        let (coin_wrapper_signer, signer_cap) = account::create_resource_account(swap_signer, COIN_WRAPPER_NAME);
+        let staking_signer = &package_manager::get_signer();
+        let (coin_wrapper_signer, signer_cap) = account::create_resource_account(staking_signer, COIN_WRAPPER_NAME);
         package_manager::add_address(string::utf8(COIN_WRAPPER_NAME), signer::address_of(&coin_wrapper_signer));
         move_to(&coin_wrapper_signer, WrapperAccount {
             signer_cap,

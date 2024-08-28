@@ -1,20 +1,17 @@
 module restaking::staking_pool {
   use aptos_framework::event;
   use aptos_framework::fungible_asset::{
-    Self, FungibleAsset, FungibleStore, Metadata,
+    Self, FungibleStore, Metadata,
   };
-  use aptos_framework::object::{Self, ConstructorRef, Object};
-  use aptos_framework::account::{Self, SignerCapability};
+  use aptos_framework::object::{Self, Object};
   use aptos_framework::primary_fungible_store;
-  use aptos_std::simple_map::{Self, SimpleMap};
-  use std::string::{Self, String};
   use std::bcs;
   use std::vector;
   use std::signer;
 
   use restaking::package_manager;
 
-  friend restaking::pool_manager;
+  friend restaking::staker_manager;
 
   const SHARES_OFFSET: u128 = 1000;
   const BALANCE_OFFSET: u64 = 1000;
@@ -35,9 +32,16 @@ module restaking::staking_pool {
   }
 
   /// Create the pool manager account to host all the staking pools.
-  public(friend) fun create_pool(token: Object<Metadata>): Object<StakingPool> {
+  public(friend) fun ensure_staking_pool(token: Object<Metadata>): Object<StakingPool> {
     let seeds = get_pool_seeds(token);
-    let ctor = &object::create_named_object(&package_manager::get_signer(), seeds);
+
+    let package_signer = &package_manager::get_signer();
+    let staking_pool_addr = object::create_object_address(&signer::address_of(package_signer), seeds);
+
+    if(object::object_exists<StakingPool>(staking_pool_addr)){
+      return object::address_to_object<StakingPool>(staking_pool_addr);
+    };
+    let ctor = &object::create_named_object(package_signer, seeds);
     
     let pool_signer = &object::generate_signer(ctor);
 
@@ -109,6 +113,11 @@ module restaking::staking_pool {
   #[view]
   public fun token_store(pool: Object<StakingPool>): Object<FungibleStore> acquires StakingPool {
     staking_pool(&pool).token_store
+  }
+
+  #[view]
+  public fun token_metadata(pool: Object<StakingPool>): Object<Metadata> acquires StakingPool {
+    fungible_asset::store_metadata(token_store(pool))
   }
 
   #[view]

@@ -1,13 +1,20 @@
 module restaking::package_manager {
+    use aptos_framework::event;
     use aptos_framework::account::{Self, SignerCapability};
     use aptos_framework::resource_account;
     use aptos_std::simple_map::{Self, SimpleMap};
-    use std::string::String;
+    use std::string::{Self, String};
+    use std::signer;
 
     friend restaking::coin_wrapper;
-    friend restaking::pool_manager;
-    friend restaking::delegation_manager;
+    friend restaking::withdrawal;
+    friend restaking::staker_manager;
+    friend restaking::operator_manager;
     friend restaking::staking_pool;
+
+    const OWNER_NAME: vector<u8> = b"OWNER";
+
+    const ENOT_OWNER: u64 = 1;
 
     /// Stores permission config such as SignerCapability for controlling the resource account.
     struct PermissionConfig has key {
@@ -17,14 +24,21 @@ module restaking::package_manager {
         addresses: SimpleMap<String, address>,
     }
 
+    #[event]
+    struct OwnerChanged has drop, store {
+        old_owner: address,
+        new_owner: address,
+    }
+
     /// Initialize PermissionConfig to establish control over the resource account.
     /// This function is invoked only when this package is deployed the first time.
-    fun init_module(swap_signer: &signer) {
-        let signer_cap = resource_account::retrieve_resource_account_cap(swap_signer, @deployer);
-        move_to(swap_signer, PermissionConfig {
+    fun init_module(staking_signer: &signer) {
+        let signer_cap = resource_account::retrieve_resource_account_cap(staking_signer, @deployer);
+        move_to(staking_signer, PermissionConfig {
             addresses: simple_map::new<String, address>(),
             signer_cap,
         });
+        add_address(string::utf8(OWNER_NAME), @deployer);
     }
 
     /// Can be called by friended modules to obtain the resource account signer.
@@ -39,6 +53,19 @@ module restaking::package_manager {
         simple_map::add(addresses, name, object);
     }
 
+    public entry fun set_owner(owner: &signer, new_owner: address){
+        let owner_addr = signer::address_of(owner);
+        only_owner(owner_addr);
+        add_address(string::utf8(OWNER_NAME), new_owner);
+        event::emit(OwnerChanged {
+            old_owner: owner_addr,
+            new_owner
+        });
+    }
+
+    public fun only_owner(owner: address){
+        assert!(owner == get_address(string::utf8(OWNER_NAME)), ENOT_OWNER);
+    }
     public fun address_exists(name: String): bool acquires PermissionConfig {
         simple_map::contains_key(&safe_permission_config().addresses, &name)
     }

@@ -8,8 +8,8 @@ module restaking::package_manager_tests {
     public fun test_can_get_signer(deployer: &signer, resource_account: &signer) {
         package_manager::initialize_for_test(deployer, resource_account);
         let ra_addr = signer::address_of(resource_account);
-        let swap_signer_addr = signer::address_of(&package_manager::get_signer());
-        assert!(swap_signer_addr == ra_addr, 0);
+        let staking_signer_addr = signer::address_of(&package_manager::get_signer());
+        assert!(staking_signer_addr == ra_addr, 0);
     }
 
     #[test(deployer = @0xcafe, resource_account=@0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5)]
