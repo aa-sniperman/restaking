@@ -4,6 +4,7 @@ module restaking::math_utils {
 
   const EOVERFLOW: u64 = 1001;
 
+  #[view]
   public fun bytes32_to_u256(bytes32: vector<u8>): u256{
     let bytes_length = vector::length(&bytes32);
     assert!(bytes_length <= 32, EOVERFLOW);
