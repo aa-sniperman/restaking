@@ -11,6 +11,9 @@ module restaking::package_manager {
     friend restaking::staker_manager;
     friend restaking::operator_manager;
     friend restaking::staking_pool;
+    friend restaking::rewards_coordinator;
+    friend restaking::avs_manager;
+    friend restaking::earner_manager;
 
     const OWNER_NAME: vector<u8> = b"OWNER";
 

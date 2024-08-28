@@ -27,7 +27,8 @@ module restaking::operator_manager {
 
 
   struct OperatorStore has key {
-    shares: SimpleMap<Object<Metadata>, u128>
+    shares: SimpleMap<Object<Metadata>, u128>,
+    salt_spent: SimpleMap<u256, bool>,
   }
 
   struct StakerManagerConfigs has key {
@@ -149,6 +150,7 @@ module restaking::operator_manager {
     let operator_store_signer = object::generate_signer(ctor);
     move_to(&operator_store_signer, OperatorStore {
       shares: simple_map::new(),
+      salt_spent: simple_map::new(),
     });
   }
 

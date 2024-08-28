@@ -18,6 +18,7 @@ module restaking::withdrawal {
   use restaking::package_manager;
   use restaking::staker_manager;
   use restaking::operator_manager;
+  use restaking::math_utils;
 
   const MAX_WITHDRAWAL_DELAY: u64 = 7 * 24 * 3600; // 7 days
   const WITHDRAWAL_NAME: vector<u8> = b"WITHDRAWAL";
@@ -229,17 +230,7 @@ module restaking::withdrawal {
   public fun withdrawal_root(withdrawal: Withdrawal): u256 {
     let bytes = bcs::to_bytes(&withdrawal);
     let hash_vec = aptos_hash::keccak256(bytes);
-    let hash_length = vector::length(&hash_vec);
-
-    let hash: u256 = 0;
-    let i: u64 = 0;
-    while(i < hash_length){
-      let byte = *vector::borrow(&hash_vec, i);
-      hash = hash | ((byte as u256) << ((i * 8) as u8));
-      i = i + 1;
-    };
-
-    hash
+    math_utils::bytes32_to_u256(hash_vec)
   }
 
   inline fun withdrawal_configs(): &WithdrawalConfigs acquires WithdrawalConfigs {
