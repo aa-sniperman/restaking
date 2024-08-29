@@ -5,6 +5,7 @@ module restaking::earner_manager{
   };
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
+
   use aptos_std::simple_map::{Self, SimpleMap};
   use std::string;
   use std::bcs;
@@ -12,17 +13,26 @@ module restaking::earner_manager{
   use std::signer;
 
   use restaking::package_manager;
+  
+  friend restaking::rewards_coordinator;
 
   const EARNER_MANAGER_NAME: vector<u8> = b"EARNER_MANAGER_NAME";
   const EARNER_PREFIX: vector<u8> = b"EARNER_PREFIX";
 
   struct EarnerStore has key {
-    claimer_for: address,
+    claimer: address,
     cummulative_claimed: SimpleMap<Object<Metadata>, u64>,
   }
 
   struct EarnerManagerConfigs has key{
     signer_cap: SignerCapability,
+  }
+
+  #[event]
+  struct ClaimerForSet has drop, store {
+    earner: address,
+    old_claimer: address,
+    new_claimer: address,
   }
 
   /// Create the share account to host all the staker & operator shares.
@@ -45,12 +55,59 @@ module restaking::earner_manager{
     package_manager::address_exists(string::utf8(EARNER_MANAGER_NAME))
   }
 
+  #[view]
+  public fun claimer_of(earner: address): address acquires EarnerStore{
+    if(exists<EarnerStore>(earner)){
+      return earner_store(earner).claimer;
+    };
+    earner
+  }
+
+  #[view]
+  public fun cummulative_claimed(earner: address, token: Object<Metadata>): u64 acquires EarnerStore{
+    if(exists<EarnerStore>(earner)){
+      let store = earner_store(earner);
+      if(simple_map::contains_key(&store.cummulative_claimed, &token)){
+        return *simple_map::borrow(&store.cummulative_claimed, &token);
+      };
+    };
+    0
+  }
+
+
+  public entry fun set_claimer_for(sender: &signer, new_claimer: address) acquires EarnerStore{
+    let earner = signer::address_of(sender);
+    ensure_earner_store(earner);
+    let store = mut_earner_store(earner);
+    let old_claimer = store.claimer;
+    store.claimer = new_claimer;
+    event::emit(ClaimerForSet {
+      earner,
+      old_claimer,
+      new_claimer
+    });
+  }
+
+
+  public(friend) fun set_cummulative_claimed(earner: address, token: Object<Metadata>, value: u64) acquires EarnerStore{
+    ensure_earner_store(earner);
+    let store = mut_earner_store(earner);
+    simple_map::upsert(&mut store.cummulative_claimed, token, value);
+  }
+
+  
+  fun ensure_earner_store(earner: address) acquires EarnerStore {
+    if(!exists<EarnerStore>(earner)){
+      create_earner_store(earner);
+    }
+  }
+
   fun create_earner_store(earner: address){
     let earner_manager_signer = earner_manager_signer();
     let ctor = &object::create_named_object(earner_manager_signer, earner_store_seeds(earner));
     let earner_store_signer = object::generate_signer(ctor);
     move_to(&earner_store_signer, EarnerStore {
-      claimer_for: @0x0,
+      claimer: @0x0,
       cummulative_claimed: simple_map::new(),
     });
   }

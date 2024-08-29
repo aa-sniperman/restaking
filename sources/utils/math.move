@@ -18,4 +18,17 @@ module restaking::math_utils {
 
     res
   }
+
+  #[view]
+  public fun u256_to_bytes32(value: u256): vector<u8>{
+    let res = vector<u8>[];
+    let i: u8 = 0;
+    while(i < 32){
+      let new_value = value >> 8;
+      let byte = value - new_value << 8;
+      vector::push_back(&mut res, (byte as u8));
+      i = i + 1;
+    };
+    res
+  }
 }

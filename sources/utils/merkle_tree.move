@@ -10,7 +10,7 @@ module restaking::merkle_tree {
   
   #[view]
   public fun verify_inclusion_keccak(
-    proof: vector<vector<u8>>,
+    proof: vector<u8>,
     leaf: vector<u8>,
     index: u32,
     root: vector<u8>,
@@ -23,7 +23,7 @@ module restaking::merkle_tree {
   }
 
   fun process_inclusion_proof_keccak(
-    proof: vector<vector<u8>>,
+    proof: vector<u8>,
     leaf: vector<u8>,
     index: u32
   ): vector<u8> {
@@ -32,7 +32,7 @@ module restaking::merkle_tree {
     let computed_hash: vector<u8> = leaf;
     let i: u64 = 32;
     while(i < proof_length) {
-      let sibling = *vector::borrow(&proof, i);
+      let sibling = vector::slice(&proof, i, i + 32);
       let hash_data = vector<u8>[];
 
       if(index % 2 == 0){
