@@ -6,7 +6,7 @@ module restaking::merkle_tree {
   use aptos_std::aptos_hash;
 
   const EOVERFLOW: u64 = 1101;
-  const EINVALID_PROOF_LENGTH: u64 = 1002;
+  const EINVALID_PROOF_LENGTH: u64 = 1102;
   
   #[view]
   public fun verify_inclusion_keccak(
