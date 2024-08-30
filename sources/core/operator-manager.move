@@ -12,6 +12,9 @@ module restaking::operator_manager {
   use std::signer;
 
   use restaking::package_manager;
+  use restaking::slasher;
+  use restaking::slashing_accounting;
+  use restaking::math_utils;
 
   friend restaking::staker_manager;
   friend restaking::withdrawal;
@@ -21,17 +24,17 @@ module restaking::operator_manager {
 
   const MAX_STAKER_POOL_LIST_LENGTH: u64 = 100;
 
-  const EMAX_STAKER_POOL_LIST_LENGTH_EXCEEDED: u64 = 101;
-  const EZERO_SHARES: u64 = 102;
-  const ESHARES_TOO_HIGH: u64 = 103;
+  const EMAX_STAKER_POOL_LIST_LENGTH_EXCEEDED: u64 = 401;
+  const EZERO_SHARES: u64 = 402;
+  const ESHARES_TOO_HIGH: u64 = 403;
 
 
   struct OperatorStore has key {
-    shares: SimpleMap<Object<Metadata>, u128>,
+    nonnormalized_shares: SimpleMap<Object<Metadata>, u128>,
     salt_spent: SimpleMap<u256, bool>,
   }
 
-  struct StakerManagerConfigs has key {
+  struct OperatorManagerConfigs has key {
     signer_cap: SignerCapability
   }
 
@@ -40,7 +43,7 @@ module restaking::operator_manager {
     operator: address,
     staker: address,
     token: Object<Metadata>,
-    shares: u128,
+    nonnormalized_shares: u128,
   }
 
   #[event]
@@ -48,7 +51,7 @@ module restaking::operator_manager {
     operator: address,
     staker: address,
     token: Object<Metadata>,
-    shares: u128,
+    nonnormalized_shares: u128,
   }
 
     /// Create the share account to host all the staker & operator shares.
@@ -61,7 +64,7 @@ module restaking::operator_manager {
         let staking_signer = &package_manager::get_signer();
         let (operator_manager_signer, signer_cap) = account::create_resource_account(staking_signer, OPERATOR_MANAGER_NAME);
         package_manager::add_address(string::utf8(OPERATOR_MANAGER_NAME), signer::address_of(&operator_manager_signer));
-        move_to(&operator_manager_signer, StakerManagerConfigs {
+        move_to(&operator_manager_signer, OperatorManagerConfigs {
             signer_cap,
         });
     }
@@ -79,18 +82,36 @@ module restaking::operator_manager {
       };
 
       let store = operator_store(operator);
-      *simple_map::borrow(&store.shares, &token)
+      let nonnormalized_shares = *simple_map::borrow(&store.nonnormalized_shares, &token);
+      let scaling_factor = slasher::share_scaling_factor(operator, token);
+      slashing_accounting::normalize(nonnormalized_shares, scaling_factor)
     }
 
     #[view]
-    public fun operator_shares(operator: address): (vector<Object<Metadata>>, vector<u128>) acquires OperatorStore {
+    public fun operator_shares(operator: address, tokens: vector<Object<Metadata>>): vector<u128> acquires OperatorStore {
+
+      let tokens_length = vector::length(&tokens);
+
       if(!operator_store_exists(operator)){
-        return (vector[], vector[]);
+        return math_utils::vector_of_zeros(tokens_length);
       };
 
+      let shares = vector<u128>[];
       let store = operator_store(operator);
 
-      (simple_map::keys(&store.shares), simple_map::values(&store.shares))
+      let i = 0;
+      while(i < tokens_length){
+        let token = *vector::borrow(&tokens, i);
+        if(simple_map::contains_key(&store.nonnormalized_shares, &token)){
+          let nonnormalized_shares = *simple_map::borrow(&store.nonnormalized_shares, &token);
+          let scaling_factor = slasher::share_scaling_factor(operator, token);
+          vector::push_back(&mut shares, slashing_accounting::normalize(nonnormalized_shares, scaling_factor));
+        }else {
+          vector::push_back(&mut shares, 0);
+        };
+        i = i + 1;
+      };
+      shares
     }
 
   fun ensure_operator_store(operator: address) acquires OperatorStore{
@@ -104,43 +125,43 @@ module restaking::operator_manager {
     exists<OperatorStore>(operator)
   }
 
-  public(friend) fun increase_operator_shares(operator: address, staker: address, token: Object<Metadata>, shares: u128) acquires OperatorStore {
+  public(friend) fun increase_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore {
     ensure_operator_store(operator);
 
     let store = mut_operator_store(operator);
 
-    if(simple_map::contains_key(&store.shares, &token)){
-      let current_shares = simple_map::borrow_mut(&mut store.shares, &token);
-      *current_shares = *current_shares + shares;
+    if(simple_map::contains_key(&store.nonnormalized_shares, &token)){
+      let current_shares = simple_map::borrow_mut(&mut store.nonnormalized_shares, &token);
+      *current_shares = *current_shares + nonnormalized_shares;
     }else {
-      simple_map::add(&mut store.shares, token, shares);
+      simple_map::add(&mut store.nonnormalized_shares, token, nonnormalized_shares);
     };
 
     event::emit(OperatorShareIncreased {
       operator,
       staker,
       token,
-      shares
+      nonnormalized_shares
     });
   }
 
-  public(friend) fun decrease_operator_shares(operator: address, staker: address, token: Object<Metadata>, shares: u128) acquires OperatorStore {
+  public(friend) fun decrease_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore {
 
     ensure_operator_store(operator);
    let store = mut_operator_store(operator);
 
-    if(simple_map::contains_key(&store.shares, &token)){
-      let current_shares = simple_map::borrow_mut(&mut store.shares, &token);
-      *current_shares = *current_shares - shares;
+    if(simple_map::contains_key(&store.nonnormalized_shares, &token)){
+      let current_shares = simple_map::borrow_mut(&mut store.nonnormalized_shares, &token);
+      *current_shares = *current_shares - nonnormalized_shares;
     }else {
-      simple_map::add(&mut store.shares, token, 0);
+      simple_map::add(&mut store.nonnormalized_shares, token, 0);
     };
 
     event::emit(OperatorShareDecreased {
       operator,
       staker,
       token,
-      shares
+      nonnormalized_shares
     });
   }
 
@@ -149,22 +170,22 @@ module restaking::operator_manager {
     let ctor = &object::create_named_object(operator_manager_signer, operator_store_seeds(operator));
     let operator_store_signer = object::generate_signer(ctor);
     move_to(&operator_store_signer, OperatorStore {
-      shares: simple_map::new(),
+      nonnormalized_shares: simple_map::new(),
       salt_spent: simple_map::new(),
     });
   }
 
 
   inline fun operator_store_address(operator: address): address {
-    object::create_object_address(&staker_manager_address(), operator_store_seeds(operator))
+    object::create_object_address(&operator_manager_address(), operator_store_seeds(operator))
   }
 
-  inline fun staker_manager_address(): address {
+  inline fun operator_manager_address(): address {
     package_manager::get_address(string::utf8(OPERATOR_MANAGER_NAME))
   }
 
-  inline fun operator_manager_signer(): &signer acquires StakerManagerConfigs{
-    &account::create_signer_with_capability(&borrow_global<StakerManagerConfigs>(staker_manager_address()).signer_cap)
+  inline fun operator_manager_signer(): &signer acquires OperatorManagerConfigs{
+    &account::create_signer_with_capability(&borrow_global<OperatorManagerConfigs>(operator_manager_address()).signer_cap)
   }
 
   inline fun operator_store_seeds(operator: address): vector<u8>{

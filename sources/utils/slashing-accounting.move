@@ -32,4 +32,14 @@ module restaking::slashing_accounting {
     };
     (scaling_factor_before * BIPS_FACTOR_SQUARE) / (BIPS_FACTOR_SQUARE - rate_to_slash)
   }
+
+  #[view]
+  public fun bips_factor_square(): u64 {
+    BIPS_FACTOR_SQUARE
+  }
+
+  #[view]
+  public fun share_conversion_scale(): u64{
+    SHARE_CONVERSION_SCALE
+  }
 }

@@ -14,6 +14,7 @@ module restaking::package_manager {
     friend restaking::rewards_coordinator;
     friend restaking::avs_manager;
     friend restaking::earner_manager;
+    friend restaking::slasher;
 
     const OWNER_NAME: vector<u8> = b"OWNER";
 

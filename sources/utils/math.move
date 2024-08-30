@@ -31,4 +31,17 @@ module restaking::math_utils {
     };
     res
   }
+
+  #[view]
+  public fun vector_of_zeros(length: u64): vector<u128>{
+    let zeros = vector::empty<u128>();
+
+    let i = 0;
+    while (i < length) {
+      vector::push_back(&mut zeros, 0u128);
+      i = i + 1;
+    };
+
+    zeros 
+  }
 }

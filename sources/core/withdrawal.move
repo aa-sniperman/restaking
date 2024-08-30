@@ -19,6 +19,9 @@ module restaking::withdrawal {
   use restaking::staker_manager;
   use restaking::operator_manager;
   use restaking::math_utils;
+  use restaking::epoch;
+  use restaking::slasher;
+  use restaking::slashing_accounting;
 
   const MAX_WITHDRAWAL_DELAY: u64 = 7 * 24 * 3600; // 7 days
   const WITHDRAWAL_NAME: vector<u8> = b"WITHDRAWAL";
@@ -29,6 +32,7 @@ module restaking::withdrawal {
   const EWITHDRAWAL_INPUT_LENGTH_MISMATCH: u64 = 304;
   const ESENDER_NOT_WITHDRAWER: u64 = 305;
   const EMAX_WITHDRAWAL_DELAY_EXCEEDED: u64 = 306;
+  const EWITHDRAWAL_STILL_SLASHABLE: u64 = 307;
 
   struct Withdrawal has drop, store {
     staker: address,
@@ -37,7 +41,7 @@ module restaking::withdrawal {
     nonce: u256,
     start_time: u64,
     tokens: vector<Object<Metadata>>,
-    shares: vector<u128>,
+    nonnormalized_shares: vector<u128>,
   }
 
   struct QueuedWithdrawalParams {
@@ -46,10 +50,15 @@ module restaking::withdrawal {
     withdrawer: address,
   }
 
+  struct PendingWithdrawalData has drop, store {
+    is_pending: bool,
+    creation_epoch: u64,
+  }
+
   struct WithdrawalConfigs has key {
     signer_cap: SignerCapability,
     min_withdrawal_delay: u64,
-    pending_withdrawals: SimpleMap<u256, bool>,
+    pending_withdrawals: SimpleMap<u256, PendingWithdrawalData>,
     token_withdrawal_delay: SimpleMap<Object<Metadata>, u64>,
   }
 
@@ -105,7 +114,7 @@ module restaking::withdrawal {
 
   public entry fun undelegate(sender: &signer, staker: address){
     let operator = staker_manager::undelegate(sender, staker);
-    let (tokens, token_shares) = staker_manager::staker_shares(staker);
+    let (tokens, token_shares) = staker_manager::staker_nonormalized_shares(staker);
 
     if(vector::length(&tokens) > 0){
       remove_shares_and_queue_withdrawal(
@@ -122,7 +131,7 @@ module restaking::withdrawal {
     operator: address,
     withdrawer: address,
     tokens: vector<Object<Metadata>>,
-    shares: vector<u128>
+    nonnormalized_shares: vector<u128>
   ): u256 acquires WithdrawalConfigs {
     let tokens_length = vector::length(&tokens);
     assert!(tokens_length > 0, ETOKENS_ZERO_LENGTH);
@@ -130,7 +139,7 @@ module restaking::withdrawal {
     while(idx < tokens_length){
       if(operator != @0x0){
         let token = vector::borrow(&tokens, idx);
-        let token_shares = vector::borrow(&shares, idx);
+        let token_shares = vector::borrow(&nonnormalized_shares, idx);
         operator_manager::decrease_operator_shares(operator, staker, *token, *token_shares);
         staker_manager::remove_shares(staker, *token, *token_shares);
       };
@@ -138,6 +147,7 @@ module restaking::withdrawal {
     };
     let nonce = staker_manager::cummulative_withdrawals_queued(staker);
     staker_manager::increment_cummulative_withdrawals_queued(staker);
+
     let withdrawal = Withdrawal {
       staker,
       delegated_to: operator,
@@ -145,12 +155,15 @@ module restaking::withdrawal {
       nonce,
       start_time: timestamp::now_seconds(),
       tokens,
-      shares
+      nonnormalized_shares
     };
 
     let withdrawal_root = withdrawal_root(withdrawal);
     let configs = mut_withdrawal_configs();
-    simple_map::upsert(&mut configs.pending_withdrawals, withdrawal_root, true);
+    simple_map::upsert(&mut configs.pending_withdrawals, withdrawal_root, PendingWithdrawalData {
+      is_pending: true,
+      creation_epoch: epoch::current_epoch()
+    });
 
     event::emit(WithdrawalQueued {
       withdrawal_root,
@@ -171,7 +184,15 @@ module restaking::withdrawal {
     assert!(sender_addr == withdrawal.withdrawer, ESENDER_NOT_WITHDRAWER);
     let withdrawal_root = withdrawal_root(withdrawal);
     let configs = mut_withdrawal_configs();
-    assert!(*simple_map::borrow(&configs.pending_withdrawals, &withdrawal_root) == true, EWITHDRAWAL_NOT_PENDING);
+
+    let pending_withdrawal_data = simple_map::borrow(&configs.pending_withdrawals, &withdrawal_root);
+    let end_of_slashability_epoch = epoch::end_of_slashability_epoch(pending_withdrawal_data.creation_epoch);
+    
+    assert!(epoch::current_epoch() > end_of_slashability_epoch, EWITHDRAWAL_STILL_SLASHABLE);
+    assert!(pending_withdrawal_data.is_pending == true, EWITHDRAWAL_NOT_PENDING);
+
+    simple_map::remove(&mut configs.pending_withdrawals, &withdrawal_root);
+
 
     let now = timestamp::now_seconds();
     assert!(withdrawal.start_time + configs.min_withdrawal_delay <= now, EWITHDRAWAL_DELAY_NOT_PASSED_YET);
@@ -184,17 +205,27 @@ module restaking::withdrawal {
     let idx = 0;
 
     while(idx < tokens_length){
-      let token = vector::borrow(&withdrawal.tokens, idx);
-      let withdrawal_delay = *simple_map::borrow(&configs.token_withdrawal_delay, token);
+      let token = *vector::borrow(&withdrawal.tokens, idx);
+      let withdrawal_delay = *simple_map::borrow(&configs.token_withdrawal_delay, &token);
       assert!(withdrawal.start_time + withdrawal_delay <= now, EWITHDRAWAL_DELAY_NOT_PASSED_YET);
-      let shares = *vector::borrow(&withdrawal.shares, idx);
+      let nonnormalized_shares = *vector::borrow(&withdrawal.nonnormalized_shares, idx);
+
+      let (can_withdraw, scaling_factor) = slasher::get_withdrawability_and_scaling_factor_at_epoch(
+        operator,
+        token,
+        end_of_slashability_epoch
+      );
+
+      assert!(can_withdraw, EWITHDRAWAL_STILL_SLASHABLE);
+
+      let shares = slashing_accounting::normalize(nonnormalized_shares, scaling_factor);
       
       if(receive_as_tokens){
-        staker_manager::withdraw(withdrawal.staker, *token, shares);
+        staker_manager::withdraw(withdrawal.staker, token, shares);
       } else {
-        staker_manager::add_shares(sender_addr, *token, shares);
+        staker_manager::add_shares(sender_addr, token, nonnormalized_shares);
         if(operator != @0x0){
-          operator_manager::increase_operator_shares(operator, sender_addr, *token, shares);
+          operator_manager::increase_operator_shares(operator, sender_addr, token, nonnormalized_shares);
         }
       };
       idx = idx + 1;
