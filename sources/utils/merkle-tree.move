@@ -1,5 +1,4 @@
 module restaking::merkle_tree {
-  use std::bcs;
   use std::vector;
   
   use aptos_std::comparator;

@@ -1,15 +1,12 @@
 module restaking::withdrawal {
   use aptos_framework::event;
-  use aptos_framework::fungible_asset::{
-    Self, FungibleAsset, FungibleStore, Metadata,
-  };
-  use aptos_framework::object::{Self, ConstructorRef, Object};
+  use aptos_framework::fungible_asset::{Metadata};
+  use aptos_framework::object::{Object};
   use aptos_framework::account::{Self, SignerCapability};
-  use aptos_framework::primary_fungible_store;
   use aptos_framework::timestamp;
   use aptos_std::simple_map::{Self, SimpleMap};
   use aptos_std::aptos_hash;
-  use std::string::{Self, String};
+  use std::string;
 
 
   use std::vector;
@@ -112,7 +109,7 @@ module restaking::withdrawal {
       package_manager::get_address(string::utf8(WITHDRAWAL_NAME))
     }
 
-  public entry fun undelegate(sender: &signer, staker: address){
+  public entry fun undelegate(sender: &signer, staker: address) acquires WithdrawalConfigs{
     let operator = staker_manager::undelegate(sender, staker);
     let (tokens, token_shares) = staker_manager::staker_nonormalized_shares(staker);
 
@@ -158,7 +155,7 @@ module restaking::withdrawal {
       nonnormalized_shares
     };
 
-    let withdrawal_root = withdrawal_root(withdrawal);
+    let withdrawal_root = withdrawal_root(&withdrawal);
     let configs = mut_withdrawal_configs();
     simple_map::upsert(&mut configs.pending_withdrawals, withdrawal_root, PendingWithdrawalData {
       is_pending: true,
@@ -182,7 +179,7 @@ module restaking::withdrawal {
     let sender_addr = signer::address_of(sender);
 
     assert!(sender_addr == withdrawal.withdrawer, ESENDER_NOT_WITHDRAWER);
-    let withdrawal_root = withdrawal_root(withdrawal);
+    let withdrawal_root = withdrawal_root(&withdrawal);
     let configs = mut_withdrawal_configs();
 
     let pending_withdrawal_data = simple_map::borrow(&configs.pending_withdrawals, &withdrawal_root);
@@ -257,9 +254,8 @@ module restaking::withdrawal {
     withdrawal_delay
   }
 
-  #[view]
-  public fun withdrawal_root(withdrawal: Withdrawal): u256 {
-    let bytes = bcs::to_bytes(&withdrawal);
+  fun withdrawal_root(withdrawal: &Withdrawal): u256 {
+    let bytes = bcs::to_bytes(withdrawal);
     let hash_vec = aptos_hash::keccak256(bytes);
     math_utils::bytes32_to_u256(hash_vec)
   }

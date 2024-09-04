@@ -1,11 +1,10 @@
 module restaking::slasher {
   use aptos_framework::event;
   use aptos_framework::fungible_asset::{
-    Self, FungibleStore, Metadata,
+    Metadata,
   };
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
-  use aptos_framework::primary_fungible_store;
 
   use aptos_std::simple_map::{Self, SimpleMap};
   use aptos_std::smart_vector::{Self, SmartVector};
@@ -144,7 +143,7 @@ module restaking::slasher {
     while(i > 0){
       epoch_for_lookup = *smart_vector::borrow(history, i);
       if(epoch <= epoch_for_lookup){
-        return (true, epoch_for_lookup);
+        return (true, epoch_for_lookup)
       };
       i = i - 1;
     };
@@ -172,7 +171,7 @@ module restaking::slasher {
     id_at_epoch <= last_executed_id
   }
 
-  fun create_operator_slasher_store(operator: address, token: Object<Metadata>){
+  fun create_operator_slasher_store(operator: address, token: Object<Metadata>) acquires SlasherConfigs{
     let slasher_signer = slasher_signer();
     let ctor = &object::create_named_object(slasher_signer, operator_slashing_seeds(operator, token));
     let operator_store_signer = object::generate_signer(ctor);
@@ -192,7 +191,7 @@ module restaking::slasher {
     let store = operator_slashing_store(operator, token);
     let scaling_factor = store.share_scaling_factor;
     if(scaling_factor == 0){
-      return slashing_accounting::share_conversion_scale();
+      return slashing_accounting::share_conversion_scale()
     };
     scaling_factor
   }

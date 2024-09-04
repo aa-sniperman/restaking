@@ -58,7 +58,7 @@ module restaking::earner_manager{
   #[view]
   public fun claimer_of(earner: address): address acquires EarnerStore{
     if(exists<EarnerStore>(earner)){
-      return earner_store(earner).claimer;
+      return earner_store(earner).claimer
     };
     earner
   }
@@ -68,14 +68,14 @@ module restaking::earner_manager{
     if(exists<EarnerStore>(earner)){
       let store = earner_store(earner);
       if(simple_map::contains_key(&store.cummulative_claimed, &token)){
-        return *simple_map::borrow(&store.cummulative_claimed, &token);
+        return *simple_map::borrow(&store.cummulative_claimed, &token)
       };
     };
     0
   }
 
 
-  public entry fun set_claimer_for(sender: &signer, new_claimer: address) acquires EarnerStore{
+  public entry fun set_claimer_for(sender: &signer, new_claimer: address) acquires EarnerStore, EarnerManagerConfigs{
     let earner = signer::address_of(sender);
     ensure_earner_store(earner);
     let store = mut_earner_store(earner);
@@ -89,20 +89,20 @@ module restaking::earner_manager{
   }
 
 
-  public(friend) fun set_cummulative_claimed(earner: address, token: Object<Metadata>, value: u64) acquires EarnerStore{
+  public(friend) fun set_cummulative_claimed(earner: address, token: Object<Metadata>, value: u64) acquires EarnerStore, EarnerManagerConfigs{
     ensure_earner_store(earner);
     let store = mut_earner_store(earner);
     simple_map::upsert(&mut store.cummulative_claimed, token, value);
   }
 
   
-  fun ensure_earner_store(earner: address) acquires EarnerStore {
+  fun ensure_earner_store(earner: address) acquires EarnerManagerConfigs{
     if(!exists<EarnerStore>(earner)){
       create_earner_store(earner);
     }
   }
 
-  fun create_earner_store(earner: address){
+  fun create_earner_store(earner: address) acquires EarnerManagerConfigs{
     let earner_manager_signer = earner_manager_signer();
     let ctor = &object::create_named_object(earner_manager_signer, earner_store_seeds(earner));
     let earner_store_signer = object::generate_signer(ctor);

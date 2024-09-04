@@ -1,10 +1,4 @@
 module restaking::slashing_accounting {
-  use std::bcs;
-  use std::vector;
-  
-  use aptos_std::comparator;
-  use aptos_std::aptos_hash;
-
   const SHARE_CONVERSION_SCALE: u64 = 1_000_000_000;
   const BIPS_FACTOR: u64 = 10000;
   const BIPS_FACTOR_SQUARE: u64 = 100000000;
@@ -28,7 +22,7 @@ module restaking::slashing_accounting {
     assert!(rate_to_slash > 0, EZERO_RATE_TO_SLASH);
     assert!(rate_to_slash <= BIPS_FACTOR_SQUARE, ERATE_TO_SLASH_TOO_BIG);
     if(rate_to_slash == BIPS_FACTOR_SQUARE){
-      return ((1u128 << 64) as u64) - 1u64;
+      return ((1u128 << 64) as u64) - 1u64
     };
     (scaling_factor_before * BIPS_FACTOR_SQUARE) / (BIPS_FACTOR_SQUARE - rate_to_slash)
   }

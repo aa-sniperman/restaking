@@ -78,7 +78,7 @@ module restaking::operator_manager {
     #[view]
     public fun operator_token_shares(operator: address, token: Object<Metadata>): u128 acquires OperatorStore {
       if(!operator_store_exists(operator)){
-        return 0;
+        return 0
       };
 
       let store = operator_store(operator);
@@ -93,7 +93,7 @@ module restaking::operator_manager {
       let tokens_length = vector::length(&tokens);
 
       if(!operator_store_exists(operator)){
-        return math_utils::vector_of_zeros(tokens_length);
+        return math_utils::vector_of_zeros(tokens_length)
       };
 
       let shares = vector<u128>[];
@@ -114,18 +114,18 @@ module restaking::operator_manager {
       shares
     }
 
-  fun ensure_operator_store(operator: address) acquires OperatorStore{
+  fun ensure_operator_store(operator: address) acquires OperatorManagerConfigs{
     if(!operator_store_exists(operator)){
       create_operator_store(operator);
     };
   }
 
   #[view]
-  public fun operator_store_exists(operator: address): bool acquires OperatorStore{
+  public fun operator_store_exists(operator: address): bool {
     exists<OperatorStore>(operator)
   }
 
-  public(friend) fun increase_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore {
+  public(friend) fun increase_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore, OperatorManagerConfigs {
     ensure_operator_store(operator);
 
     let store = mut_operator_store(operator);
@@ -145,7 +145,7 @@ module restaking::operator_manager {
     });
   }
 
-  public(friend) fun decrease_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore {
+  public(friend) fun decrease_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore, OperatorManagerConfigs {
 
     ensure_operator_store(operator);
    let store = mut_operator_store(operator);
@@ -165,7 +165,7 @@ module restaking::operator_manager {
     });
   }
 
-  fun create_operator_store(operator: address){
+  fun create_operator_store(operator: address) acquires OperatorManagerConfigs{
     let operator_manager_signer = operator_manager_signer();
     let ctor = &object::create_named_object(operator_manager_signer, operator_store_seeds(operator));
     let operator_store_signer = object::generate_signer(ctor);

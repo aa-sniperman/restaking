@@ -3,14 +3,13 @@ module restaking::rewards_coordinator{
   use aptos_framework::fungible_asset::{
     Metadata, Self,
   };
-  use aptos_framework::object::{Self, Object};
+  use aptos_framework::object::{Object};
   use aptos_framework::account::{Self, SignerCapability};
   use aptos_framework::timestamp;
   use aptos_framework::primary_fungible_store;
 
 
   use aptos_std::aptos_hash;
-  use aptos_std::simple_map::{Self, SimpleMap};
   use aptos_std::smart_vector::{Self, SmartVector};
   use std::string;
   use std::bcs;
@@ -148,7 +147,7 @@ module restaking::rewards_coordinator{
         package_manager::address_exists(string::utf8(REWARDS_COORDINATOR_NAME))
     }
 
-  public entry fun process_claim(
+  public fun process_claim(
     sender: &signer,
     claim: RewardsMerkleClaim,
     recipient: address
@@ -166,7 +165,6 @@ module restaking::rewards_coordinator{
     let tokens_length = vector::length(&claim.token_indices);
     let idx = 0;
     while(idx < tokens_length){
-      let token_index = vector::borrow(&claim.token_indices, idx);
       let token_leaf = vector::borrow(&claim.token_leaves, idx);
       let curr_cummulative_claimed = earner_manager::cummulative_claimed(earner, token_leaf.token);
       assert!(curr_cummulative_claimed < token_leaf.cummulative_earnings, ECUM_EARNINGS_NOT_GREATER_THAN_CUM_CLAIMED);

@@ -92,7 +92,7 @@ module restaking::staker_manager {
   }
 
 
-    public(friend) fun add_shares(staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires StakerStore {
+    public(friend) fun add_shares(staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires StakerStore, StakerManagerConfigs {
       ensure_staker_store(staker);
 
       let store = mut_staker_store(staker);
@@ -143,7 +143,7 @@ module restaking::staker_manager {
       };
     }
 
-    public(friend) fun deposit(staker: &signer, token: Object<Metadata>, asset: FungibleAsset) acquires StakerStore{
+    public(friend) fun deposit(staker: &signer, token: Object<Metadata>, asset: FungibleAsset) acquires StakerStore, StakerManagerConfigs{
       let pool = staking_pool::ensure_staking_pool(token);
 
       let store = staking_pool::token_store(pool);
@@ -169,7 +169,7 @@ module restaking::staker_manager {
       staking_pool::withdraw(recipient, pool, nonnormalized_shares);
     }
 
-    public entry fun delegate(staker: &signer, operator: address){
+    public entry fun delegate(staker: &signer, operator: address) acquires StakerStore{
       let staker_addr = signer::address_of(staker);
       let current_delegate = delegate_of(staker_addr);
       assert!(current_delegate == @0x0, ESTAKER_ALREADY_DELEGATED);
@@ -243,7 +243,7 @@ module restaking::staker_manager {
     #[view]
     public fun staker_token_shares(staker: address, token: Object<Metadata>): u128 acquires StakerStore {
       if(!staker_store_exists(staker)){
-        return 0;
+        return 0
       };
 
       let store = staker_store(staker);
@@ -259,39 +259,39 @@ module restaking::staker_manager {
   #[view]
   public fun staker_nonormalized_shares(staker: address): (vector<Object<Metadata>>, vector<u128>) acquires StakerStore {
     if(!staker_store_exists(staker)){
-        return (vector[], vector[]);
+        return (vector[], vector[])
       };
 
     let store = staker_store(staker);
     (simple_map::keys(&store.nonnormalized_shares), simple_map::values(&store.nonnormalized_shares))
   }
 
-  fun ensure_staker_store(staker: address) acquires StakerStore{
+  fun ensure_staker_store(staker: address) acquires StakerManagerConfigs{
     if(!staker_store_exists(staker)){
       create_staker_store(staker);
     };
   }
 
   #[view]
-  public fun staker_store_exists(staker: address): bool acquires StakerStore{
+  public fun staker_store_exists(staker: address): bool{
     exists<StakerStore>(staker)
   }
 
   #[view]
   public fun cummulative_withdrawals_queued(staker: address): u256 acquires StakerStore {
     if(!staker_store_exists(staker)){
-      return 0;
+      return 0
     };
     staker_store(staker).cummulative_withdrawals_queued
   }
 
-  public(friend) fun increment_cummulative_withdrawals_queued(staker: address) acquires StakerStore {
+  public(friend) fun increment_cummulative_withdrawals_queued(staker: address) acquires StakerStore, StakerManagerConfigs {
     ensure_staker_store(staker);
     let current_nonce = &mut mut_staker_store(staker).cummulative_withdrawals_queued;
     *current_nonce = *current_nonce + 1;
   }
 
-  fun create_staker_store(staker: address){
+  fun create_staker_store(staker: address) acquires StakerManagerConfigs {
     let staker_manager_signer = staker_manager_signer();
     let ctor = &object::create_named_object(staker_manager_signer, staker_store_seeds(staker));
     let staker_store_signer = object::generate_signer(ctor);

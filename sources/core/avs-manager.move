@@ -93,10 +93,10 @@ module restaking::avs_manager{
     package_manager::address_exists(string::utf8(AVS_MANAGER_NAME))
   }
 
-  public entry fun create_avs_rewards_for_all_submissions(sender: &signer, rewards_submissions: vector<RewardsSubmission>) acquires AVSStore {
+  public fun create_avs_rewards_for_all_submissions(sender: &signer, rewards_submissions: vector<RewardsSubmission>) acquires AVSStore {
     vector::for_each_ref(&rewards_submissions, |submission| create_avs_rewards_for_all_submission(sender, submission));
   }
-  public entry fun create_avs_rewards_submissions(sender: &signer, rewards_submissions: vector<RewardsSubmission>) acquires AVSStore {
+  public fun create_avs_rewards_submissions(sender: &signer, rewards_submissions: vector<RewardsSubmission>) acquires AVSStore {
     vector::for_each_ref(&rewards_submissions, |submission| create_avs_rewards_submission(sender, submission));
   }
 
@@ -182,7 +182,7 @@ module restaking::avs_manager{
 
   }
 
-  fun create_avs_store(avs: address){
+  fun create_avs_store(avs: address)acquires AVSManagerConfigs{
     let avs_manager_signer = avs_manager_signer();
     let ctor = &object::create_named_object(avs_manager_signer, avs_store_seeds(avs));
     let avs_store_signer = object::generate_signer(ctor);

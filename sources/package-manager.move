@@ -36,7 +36,7 @@ module restaking::package_manager {
 
     /// Initialize PermissionConfig to establish control over the resource account.
     /// This function is invoked only when this package is deployed the first time.
-    fun init_module(staking_signer: &signer) {
+    fun init_module(staking_signer: &signer) acquires PermissionConfig {
         let signer_cap = resource_account::retrieve_resource_account_cap(staking_signer, @deployer);
         move_to(staking_signer, PermissionConfig {
             addresses: simple_map::new<String, address>(),
@@ -57,7 +57,7 @@ module restaking::package_manager {
         simple_map::upsert(addresses, name, object);
     }
 
-    public entry fun set_owner(owner: &signer, new_owner: address){
+    public entry fun set_owner(owner: &signer, new_owner: address) acquires PermissionConfig{
         let owner_addr = signer::address_of(owner);
         only_owner(owner_addr);
         add_address(string::utf8(OWNER_NAME), new_owner);
@@ -67,7 +67,7 @@ module restaking::package_manager {
         });
     }
 
-    public fun only_owner(owner: address){
+    public fun only_owner(owner: address) acquires PermissionConfig{
         assert!(owner == get_address(string::utf8(OWNER_NAME)), ENOT_OWNER);
     }
     public fun address_exists(name: String): bool acquires PermissionConfig {

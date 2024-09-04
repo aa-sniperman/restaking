@@ -1,5 +1,4 @@
 module restaking::math_utils {
-  use std::bcs;
   use std::vector;
 
   const EOVERFLOW: u64 = 1001;

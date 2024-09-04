@@ -39,7 +39,7 @@ module restaking::staking_pool {
     let staking_pool_addr = object::create_object_address(&signer::address_of(package_signer), seeds);
 
     if(object::object_exists<StakingPool>(staking_pool_addr)){
-      return object::address_to_object<StakingPool>(staking_pool_addr);
+      return object::address_to_object<StakingPool>(staking_pool_addr)
     };
     let ctor = &object::create_named_object(package_signer, seeds);
     
