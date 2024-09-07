@@ -200,7 +200,4 @@ module restaking::coin_wrapper {
     inline fun mut_wrapper_account(): &mut WrapperAccount acquires WrapperAccount {
         borrow_global_mut<WrapperAccount>(wrapper_address())
     }
-
-    #[test_only]
-    friend restaking::coin_wrapper_tests;
 }

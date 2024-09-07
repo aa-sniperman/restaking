@@ -88,11 +88,21 @@ module restaking::package_manager {
         use std::vector;
         use std::signer;
 
-        account::create_account_for_test(signer::address_of(deployer));
+        let deployer_addr = signer::address_of(deployer);
+        let resource_account_addr = signer::address_of(resource_account);
+        if(!exists<PermissionConfig>(resource_account_addr)){
+            aptos_framework::timestamp::set_time_has_started_for_testing(&account::create_signer_for_test(@0x1));
+            account::create_account_for_test(signer::address_of(deployer));
 
-        // create a resource account from the origin account, mocking the module publishing process
-        resource_account::create_resource_account(deployer, vector::empty<u8>(), vector::empty<u8>());
-        init_module(resource_account);
+            resource_account::create_resource_account(deployer, vector::empty<u8>(), vector::empty<u8>());
+            
+            let addresses = simple_map::new<String, address>();
+            simple_map::add(&mut addresses, string::utf8(OWNER_NAME), deployer_addr);
+            move_to(resource_account, PermissionConfig {
+                addresses,
+                signer_cap: account::create_test_signer_cap(resource_account_addr),
+            });
+        };
     }
 
     #[test_only]

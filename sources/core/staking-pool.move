@@ -89,6 +89,8 @@ module restaking::staking_pool {
 
     let total_shares = &mut staking_pool.total_shares;
 
+    let token = fungible_asset::store_metadata(staking_pool.token_store);
+
     assert!(amount_shares <= *total_shares, ETOTAL_SHARES_EXCEEDED);
 
     let total_balance = fungible_asset::balance(staking_pool.token_store);
@@ -96,14 +98,14 @@ module restaking::staking_pool {
     let virtual_shares = *total_shares + SHARES_OFFSET;
     let virtual_balance = total_balance + BALANCE_OFFSET;
 
-    let amount = (((virtual_balance as u128) - amount_shares) / virtual_shares as u64);
+    let amount = (((virtual_balance as u128) * amount_shares) / virtual_shares as u64);
 
     *total_shares = *total_shares - amount_shares;
 
     let pool_signer = &package_manager::get_signer();
     let withdrawal = fungible_asset::withdraw(pool_signer, staking_pool.token_store, amount);
 
-    let to = ensure_token_store(recipient, pool);
+    let to = primary_fungible_store::ensure_primary_store_exists(recipient, token);
 
     emit_exchange_rate(virtual_balance - amount, *total_shares + SHARES_OFFSET);
 
@@ -124,12 +126,6 @@ module restaking::staking_pool {
   public fun total_shares(pool: Object<StakingPool>): u128 acquires StakingPool {
     let staking_pool = staking_pool(&pool);
     staking_pool.total_shares
-  }
-  
-  fun ensure_token_store<T: key>(user: address, pool: Object<T>): Object<FungibleStore> {
-    primary_fungible_store::ensure_primary_store_exists(user, pool);
-    let store = primary_fungible_store::primary_store(user, pool);
-    store
   }
 
   inline fun get_pool_seeds(token: Object<Metadata>): vector<u8>{
@@ -156,4 +152,7 @@ module restaking::staking_pool {
       exchange_rate: 1_000_000_000u128 * (virtual_balance as u128) / virtual_shares
     });
   }
+
+  #[test_only]
+  friend restaking::staking_pool_tests;
 }
