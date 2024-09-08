@@ -31,7 +31,7 @@ module restaking::withdrawal {
   const EMAX_WITHDRAWAL_DELAY_EXCEEDED: u64 = 306;
   const EWITHDRAWAL_STILL_SLASHABLE: u64 = 307;
 
-  struct Withdrawal has drop, store {
+  struct Withdrawal has copy, drop, store {
     staker: address,
     delegated_to: address,
     withdrawer: address,
@@ -39,12 +39,6 @@ module restaking::withdrawal {
     start_time: u64,
     tokens: vector<Object<Metadata>>,
     nonnormalized_shares: vector<u128>,
-  }
-
-  struct QueuedWithdrawalParams {
-    tokens: vector<Object<Metadata>>,
-    shares: vector<u64>,
-    withdrawer: address,
   }
 
   struct PendingWithdrawalData has drop, store {
@@ -123,15 +117,30 @@ module restaking::withdrawal {
       );
     };
   }
+
+  public entry fun queue_withdrawal(
+    sender: &signer,
+    tokens: vector<Object<Metadata>>,
+    nonnormalized_shares: vector<u128>
+  ) acquires WithdrawalConfigs {
+    let sender_addr = signer::address_of(sender);
+    let operator = staker_manager::delegate_of(sender_addr);
+    remove_shares_and_queue_withdrawal(sender_addr, operator, sender_addr, tokens, nonnormalized_shares);
+  }
+
+
   fun remove_shares_and_queue_withdrawal(
     staker: address,
     operator: address,
     withdrawer: address,
     tokens: vector<Object<Metadata>>,
     nonnormalized_shares: vector<u128>
-  ): u256 acquires WithdrawalConfigs {
+  ): Withdrawal acquires WithdrawalConfigs {
     let tokens_length = vector::length(&tokens);
+    let shares_length = vector::length(&nonnormalized_shares);
+
     assert!(tokens_length > 0, ETOKENS_ZERO_LENGTH);
+    assert!(tokens_length == shares_length, EWITHDRAWAL_INPUT_LENGTH_MISMATCH);
     let idx = 0;
     while(idx < tokens_length){
       if(operator != @0x0){
@@ -167,19 +176,34 @@ module restaking::withdrawal {
       withdrawal
     });
 
-    withdrawal_root
+    withdrawal
   }
 
-  fun complete_queued_withdrawal(
+  public entry fun complete_queued_withdrawal(
     sender: &signer,
-    withdrawal: Withdrawal,
+    staker: address,
+    delegated_to: address,
+    withdrawer: address,
+    nonce: u256,
+    start_time: u64,
+    tokens: vector<Object<Metadata>>,
+    nonnormalized_shares: vector<u128>,
     receive_as_tokens: bool
   ) acquires WithdrawalConfigs {
 
     let sender_addr = signer::address_of(sender);
 
-    assert!(sender_addr == withdrawal.withdrawer, ESENDER_NOT_WITHDRAWER);
-    let withdrawal_root = withdrawal_root(&withdrawal);
+    assert!(sender_addr == withdrawer, ESENDER_NOT_WITHDRAWER);
+
+    let withdrawal_root = withdrawal_root(&Withdrawal {
+      staker,
+      delegated_to,
+      withdrawer,
+      nonce,
+      start_time,
+      tokens,
+      nonnormalized_shares
+    });
     let configs = mut_withdrawal_configs();
 
     let pending_withdrawal_data = smart_table::borrow(&configs.pending_withdrawals, withdrawal_root);
@@ -190,25 +214,23 @@ module restaking::withdrawal {
 
     smart_table::remove(&mut configs.pending_withdrawals, withdrawal_root);
 
-
     let now = timestamp::now_seconds();
-    assert!(withdrawal.start_time + configs.min_withdrawal_delay <= now, EWITHDRAWAL_DELAY_NOT_PASSED_YET);
+    assert!(start_time + configs.min_withdrawal_delay <= now, EWITHDRAWAL_DELAY_NOT_PASSED_YET);
 
-    let tokens_length = vector::length(&withdrawal.tokens);
+    let tokens_length = vector::length(&tokens);
 
-    smart_table::remove(&mut configs.pending_withdrawals, withdrawal_root);
-
-    let operator = staker_manager::delegate_of(withdrawal.staker);
     let idx = 0;
 
     while(idx < tokens_length){
-      let token = *vector::borrow(&withdrawal.tokens, idx);
+      let token = *vector::borrow(&tokens, idx);
+      
       let withdrawal_delay = *smart_table::borrow_with_default(&configs.token_withdrawal_delay, token, &0);
-      assert!(withdrawal.start_time + withdrawal_delay <= now, EWITHDRAWAL_DELAY_NOT_PASSED_YET);
-      let nonnormalized_shares = *vector::borrow(&withdrawal.nonnormalized_shares, idx);
+      assert!(start_time + withdrawal_delay <= now, EWITHDRAWAL_DELAY_NOT_PASSED_YET);
+      
+      let nonnormalized_shares = *vector::borrow(&nonnormalized_shares, idx);
 
       let (can_withdraw, scaling_factor) = slasher::get_withdrawability_and_scaling_factor_at_epoch(
-        operator,
+        delegated_to,
         token,
         end_of_slashability_epoch
       );
@@ -218,9 +240,10 @@ module restaking::withdrawal {
       let shares = slashing_accounting::normalize(nonnormalized_shares, scaling_factor);
       
       if(receive_as_tokens){
-        staker_manager::withdraw(withdrawal.staker, token, shares);
+        staker_manager::withdraw(staker, token, shares);
       } else {
         staker_manager::add_shares(sender_addr, token, nonnormalized_shares);
+        let operator = staker_manager::delegate_of(staker);
         if(operator != @0x0){
           operator_manager::increase_operator_shares(operator, sender_addr, token, nonnormalized_shares);
         }
@@ -288,4 +311,31 @@ module restaking::withdrawal {
     let configs = mut_withdrawal_configs();
     smart_table::upsert(&mut configs.token_withdrawal_delay, token, delay);
   }
+
+  #[test_only]
+  public fun queue_withdrawal_for_test(
+    sender: &signer,
+    tokens: vector<Object<Metadata>>,
+    nonnormalized_shares: vector<u128>
+  ): (
+    address, 
+    address, 
+    address, 
+    u256, 
+    u64,
+  ) acquires WithdrawalConfigs {
+    let sender_addr = signer::address_of(sender);
+    let operator = staker_manager::delegate_of(sender_addr);
+    let withdrawal = remove_shares_and_queue_withdrawal(sender_addr, operator, sender_addr, tokens, nonnormalized_shares);
+    (
+      withdrawal.staker,
+      withdrawal.delegated_to,
+      withdrawal.withdrawer,
+      withdrawal.nonce,
+      withdrawal.start_time,
+    )
+  }
+
+  #[test_only]
+  friend restaking::delegation_tests;
 }

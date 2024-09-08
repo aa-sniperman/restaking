@@ -144,14 +144,12 @@ module restaking::operator_manager {
   public(friend) fun decrease_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore, OperatorManagerConfigs {
 
     ensure_operator_store(operator);
-   let store = mut_operator_store(operator);
+    let store = mut_operator_store(operator);
 
-    if(smart_table::contains(&store.nonnormalized_shares, token)){
-      let current_shares = smart_table::borrow_mut(&mut store.nonnormalized_shares, token);
-      *current_shares = *current_shares - nonnormalized_shares;
-    }else {
-      smart_table::add(&mut store.nonnormalized_shares, token, 0);
-    };
+    let current_shares = smart_table::borrow_mut_with_default(&mut store.nonnormalized_shares, token, 0);
+
+    assert!(*current_shares >= nonnormalized_shares, ESHARES_TOO_HIGH);
+    *current_shares = *current_shares - nonnormalized_shares;
 
     event::emit(OperatorShareDecreased {
       operator,

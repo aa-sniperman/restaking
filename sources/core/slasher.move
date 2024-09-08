@@ -141,6 +141,9 @@ module restaking::slasher {
     token: Object<Metadata>,
     epoch: u64
   ): (bool, u64) acquires OperatorSlashingStore {
+    if(!operator_slasher_store_exists(operator, token)){
+      return (false, 0)
+    };
     let store = operator_slashing_store(operator, token);
     let history = &store.slashed_epoch_history;
     let epoch_for_lookup: u64 = 0;
