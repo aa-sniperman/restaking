@@ -12,6 +12,8 @@ module restaking::test_helpers {
   use restaking::operator_manager;
   use restaking::slasher;
   use restaking::withdrawal;
+  use restaking::rewards_coordinator;
+  use restaking::avs_manager;
   
   public fun set_up(deployer: &signer, ra: &signer){
     package_manager::initialize_for_test(deployer, ra);
@@ -19,6 +21,15 @@ module restaking::test_helpers {
     operator_manager::initialize();
     slasher::initialize();
     withdrawal::initialize();
+    rewards_coordinator::initialize();
+    avs_manager::initialize();
+
+    assert!(staker_manager::is_initialized(), 0);
+    assert!(operator_manager::is_initialized(), 0);
+    assert!(slasher::is_initialized(), 0);
+    assert!(withdrawal::is_initialized(), 0);
+    assert!(rewards_coordinator::is_initialized(), 0);
+    assert!(avs_manager::is_initialized(), 0);
   }
 
   public fun create_fungible_asset_and_mint(creator: &signer, name: vector<u8>, amount: u64): FungibleAsset {

@@ -18,15 +18,6 @@ module restaking::delegation_tests {
   use restaking::withdrawal;
   use restaking::test_helpers;
 
-  #[test(deployer = @0xcafe, ra=@0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5)]
-  public fun test_initialized(deployer: &signer, ra: &signer){
-    test_helpers::set_up(deployer, ra);
-    assert!(staker_manager::is_initialized(), 0);
-    assert!(operator_manager::is_initialized(), 0);
-    assert!(slasher::is_initialized(), 0);
-    assert!(withdrawal::is_initialized(), 0);
-  }
-
   #[test(deployer = @0xcafe, staker = @0xab12, ra=@0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5)]
   public fun test_add_shares(deployer: &signer, ra: &signer, staker: &signer){
 
@@ -373,4 +364,48 @@ module restaking::delegation_tests {
     );
   }
 
+  #[test(deployer = @0xcafe, staker = @0xab12, operator = @0x7878, ra=@0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5)]
+  public fun test_undelegate_via_withdrawal(deployer: &signer, ra: &signer, staker: &signer, operator: &signer){
+
+    let staker_addr = signer::address_of(staker);
+    let operator_addr = signer::address_of(operator);
+
+    test_helpers::set_up(deployer, ra);
+
+    let deposit_amount = 1000;
+    let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
+    let token = fungible_asset::asset_metadata(&fa);
+
+    staker_manager::deposit(staker, token, fa);
+
+    staker_manager::delegate(operator, operator_addr);
+
+    staker_manager::delegate(staker, operator_addr);
+
+    let operator_token_shares = operator_manager::operator_token_shares(
+      operator_addr,
+      token
+    );
+
+    assert!(operator_token_shares == (deposit_amount as u128), 2);
+
+    let withdrawal_delay = withdrawal::withdrawal_delay(vector[token]);
+    assert!(withdrawal_delay == 24 * 3600, 0);
+
+    withdrawal::undelegate(
+      staker,
+      staker_addr
+    );
+
+    assert!(staker_manager::delegate_of(staker_addr) == @0x0, 1);
+
+    let staker_nonce_after = staker_manager::cummulative_withdrawals_queued(staker_addr);
+    assert!(staker_nonce_after == 1, 0);
+
+    let staker_shares_after = staker_manager::staker_token_shares(staker_addr, token);
+    assert!(staker_shares_after == 0, 0);
+
+    let operator_shares_after = operator_manager::operator_token_shares(operator_addr, token);
+    assert!(operator_shares_after == 0, 0);
+  }
 }

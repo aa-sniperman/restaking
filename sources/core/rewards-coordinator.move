@@ -133,7 +133,7 @@ module restaking::rewards_coordinator{
         package_manager::add_address(string::utf8(REWARDS_COORDINATOR_NAME), signer::address_of(&rewards_coordinator_signer));
         move_to(&rewards_coordinator_signer, RewardsConfigs {
             signer_cap,
-            rewards_updater: @0x0,
+            rewards_updater: @deployer,
             activation_delay: 0,
             current_rewards_calculation_end_time: 0,
             global_operator_commission_bips: 100,
@@ -294,4 +294,19 @@ module restaking::rewards_coordinator{
   inline fun mut_rewards_configs(): &mut RewardsConfigs acquires RewardsConfigs {
     borrow_global_mut<RewardsConfigs>(rewards_coordinator_address())
   }
+
+  // Operators
+  public entry fun set_rewards_updater(sender: &signer, new_rewards_updater: address) acquires RewardsConfigs {
+    let sender_addr = signer::address_of(sender);
+    let configs = mut_rewards_configs();
+    assert!(configs.rewards_updater == sender_addr, ENOT_REWARDS_UPDATER);
+    configs.rewards_updater = new_rewards_updater;
+    event::emit(RewardsUpdaterSet {
+      old_rewards_updater: sender_addr,
+      new_rewards_updater
+    });
+  }
+
+  #[test_only]
+  friend restaking::rewards_tests;
 }

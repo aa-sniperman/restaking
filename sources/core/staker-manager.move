@@ -338,4 +338,7 @@ module restaking::staker_manager {
 
   #[test_only]
   friend restaking::delegation_tests;
+
+  #[test_only]
+  friend restaking::rewards_tests;
 }

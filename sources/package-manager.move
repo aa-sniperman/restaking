@@ -107,4 +107,6 @@ module restaking::package_manager {
 
     #[test_only]
     friend restaking::package_manager_tests;
+    #[test_only]
+    friend restaking::rewards_tests;
 }
