@@ -5,7 +5,7 @@ module restaking::staker_manager {
   };
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
-  use aptos_std::simple_map::{Self, SimpleMap};
+  use aptos_std::smart_table::{Self, SmartTable};
   use aptos_std::smart_vector::{Self, SmartVector};
   use std::string;
   use std::bcs;
@@ -38,7 +38,7 @@ module restaking::staker_manager {
     delegated_to: address,
     cummulative_withdrawals_queued: u256,
     pool_list: SmartVector<Object<Metadata>>,
-    nonnormalized_shares: SimpleMap<Object<Metadata>, u128>
+    nonnormalized_shares: SmartTable<Object<Metadata>, u128>
   }
 
   struct StakerManagerConfigs has key {
@@ -97,11 +97,7 @@ module restaking::staker_manager {
 
       let store = mut_staker_store(staker);
 
-      if(!simple_map::contains_key(&store.nonnormalized_shares, &token)){
-        simple_map::add(&mut store.nonnormalized_shares, token, 0);
-      };
-
-      let current_shares = simple_map::borrow_mut(&mut store.nonnormalized_shares, &token);
+      let current_shares = smart_table::borrow_mut_with_default(&mut store.nonnormalized_shares, token, 0);
       let staker_pool_list = &mut store.pool_list;
 
       let current_list_length = smart_vector::length(staker_pool_list);
@@ -126,11 +122,7 @@ module restaking::staker_manager {
       assert!(nonnormalized_shares > 0, EZERO_SHARES);
       let store = mut_staker_store(staker);
 
-      if(!simple_map::contains_key(&store.nonnormalized_shares, &token)){
-        simple_map::add(&mut store.nonnormalized_shares, token, 0);
-      };
-
-      let current_shares = simple_map::borrow_mut(&mut store.nonnormalized_shares, &token);
+      let current_shares = smart_table::borrow_mut_with_default(&mut store.nonnormalized_shares, token, 0);
       assert!(nonnormalized_shares <= *current_shares, ESHARES_TOO_HIGH);
       *current_shares = *current_shares - nonnormalized_shares;
 
@@ -169,18 +161,23 @@ module restaking::staker_manager {
       staking_pool::withdraw(recipient, pool, nonnormalized_shares);
     }
 
-    public entry fun delegate(staker: &signer, operator: address) acquires StakerStore{
+    public entry fun delegate(staker: &signer, operator: address) acquires StakerStore, StakerManagerConfigs{
       let staker_addr = signer::address_of(staker);
+      ensure_staker_store(staker_addr);
+      
       let current_delegate = delegate_of(staker_addr);
       assert!(current_delegate == @0x0, ESTAKER_ALREADY_DELEGATED);
-      assert!(is_operator(operator), ENOT_OPERATOR);
+      assert!(is_operator(operator) || staker_addr == operator, ENOT_OPERATOR);
       delegate_internal(staker_addr, operator);
     }
 
-    public(friend) fun undelegate(sender: &signer, staker: address): address acquires StakerStore{
+    public(friend) fun undelegate(sender: &signer, staker: address): address acquires StakerStore, StakerManagerConfigs{
       assert!(staker != @0x0, EZERO_ADDRESS);
+
+      ensure_staker_store(staker);
+
       let operator = delegate_of(staker);
-      assert!(operator == @0x0, ESTAKER_ALREADY_DELEGATED);
+      assert!(operator != @0x0, ESTAKER_ALREADY_DELEGATED);
       assert!(is_operator(operator), ENOT_OPERATOR);
       let sender_addr = signer::address_of(sender);
       assert!(sender_addr == staker || sender_addr == operator, ENOT_STAKER_NOR_OPERATOR);
@@ -205,6 +202,7 @@ module restaking::staker_manager {
     }
 
   fun delegate_internal(staker: address, operator: address) acquires StakerStore {
+    
     let store = mut_staker_store(staker);
 
     store.delegated_to = operator;
@@ -247,7 +245,7 @@ module restaking::staker_manager {
       };
 
       let store = staker_store(staker);
-      let nonnormalized_shares = *simple_map::borrow(&store.nonnormalized_shares, &token);
+      let nonnormalized_shares = *smart_table::borrow_with_default(&store.nonnormalized_shares, token, &0);
 
       let operator = delegate_of(staker);
 
@@ -263,7 +261,14 @@ module restaking::staker_manager {
       };
 
     let store = staker_store(staker);
-    (simple_map::keys(&store.nonnormalized_shares), simple_map::values(&store.nonnormalized_shares))
+    let tokens = vector<Object<Metadata>>[];
+    let nonnormalized_shares = vector<u128>[];
+    smart_table::for_each_ref(&store.nonnormalized_shares, |k, v| {
+      vector::push_back(&mut tokens, *k);
+      vector::push_back(&mut nonnormalized_shares, *v);
+    }); 
+
+    (tokens, nonnormalized_shares)
   }
 
   fun ensure_staker_store(staker: address) acquires StakerManagerConfigs{
@@ -274,7 +279,7 @@ module restaking::staker_manager {
 
   #[view]
   public fun staker_store_exists(staker: address): bool{
-    exists<StakerStore>(staker)
+    exists<StakerStore>(staker_store_address(staker))
   }
 
   #[view]
@@ -298,7 +303,7 @@ module restaking::staker_manager {
     move_to(&staker_store_signer, StakerStore {
       delegated_to: @0x0,
       cummulative_withdrawals_queued: 0,
-      nonnormalized_shares: simple_map::new(),
+      nonnormalized_shares: smart_table::new(),
       pool_list: smart_vector::new(),
     });
   }
@@ -330,4 +335,7 @@ module restaking::staker_manager {
   inline fun mut_staker_store(staker: address): &mut StakerStore acquires StakerStore {
     borrow_global_mut<StakerStore>(staker_store_address(staker))
   }
+
+  #[test_only]
+  friend restaking::delegation_tests;
 }

@@ -8,7 +8,7 @@ module restaking::avs_manager{
   use aptos_framework::timestamp;
   use aptos_framework::primary_fungible_store;
 
-  use aptos_std::simple_map::{Self, SimpleMap};
+  use aptos_std::smart_table::{Self, SmartTable};
   use aptos_std::aptos_hash;
   use aptos_std::comparator;
   
@@ -47,10 +47,10 @@ module restaking::avs_manager{
   }
 
   struct AVSStore has key {
-    operator_registration: SimpleMap<address, bool>,
+    operator_registration: SmartTable<address, bool>,
     rewards_submission_nonce: u256,
-    rewards_submission_hash_submitted: SimpleMap<u256, bool>,
-    rewards_submission_for_all_hash_submitted: SimpleMap<u256, bool>,
+    rewards_submission_hash_submitted: SmartTable<u256, bool>,
+    rewards_submission_for_all_hash_submitted: SmartTable<u256, bool>,
   }
 
   struct AVSManagerConfigs has key {
@@ -106,7 +106,7 @@ module restaking::avs_manager{
     let nonce = store.rewards_submission_nonce;
     let submission_hash = rewards_submission_hash(avs, nonce, rewards_submission);
     validate_rewards_submission(rewards_submission);
-    simple_map::upsert(&mut store.rewards_submission_hash_submitted, submission_hash, true);
+    smart_table::upsert(&mut store.rewards_submission_hash_submitted, submission_hash, true);
     store.rewards_submission_nonce = nonce + 1;
 
     let treasury = signer::address_of(&package_manager::get_signer());
@@ -130,7 +130,7 @@ module restaking::avs_manager{
     let nonce = store.rewards_submission_nonce;
     let submission_hash = rewards_submission_hash(avs, nonce, rewards_submission);
     validate_rewards_submission(rewards_submission);
-    simple_map::upsert(&mut store.rewards_submission_for_all_hash_submitted, submission_hash, true);
+    smart_table::upsert(&mut store.rewards_submission_for_all_hash_submitted, submission_hash, true);
     store.rewards_submission_nonce = nonce + 1;
 
     let treasury = signer::address_of(&package_manager::get_signer());
@@ -187,10 +187,10 @@ module restaking::avs_manager{
     let ctor = &object::create_named_object(avs_manager_signer, avs_store_seeds(avs));
     let avs_store_signer = object::generate_signer(ctor);
     move_to(&avs_store_signer, AVSStore {
-      operator_registration: simple_map::new(),
+      operator_registration: smart_table::new(),
       rewards_submission_nonce: 0,
-      rewards_submission_hash_submitted: simple_map::new(),
-      rewards_submission_for_all_hash_submitted: simple_map::new(),
+      rewards_submission_hash_submitted: smart_table::new(),
+      rewards_submission_for_all_hash_submitted: smart_table::new(),
     });
   }
 

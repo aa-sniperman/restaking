@@ -155,4 +155,7 @@ module restaking::staking_pool {
 
   #[test_only]
   friend restaking::staking_pool_tests;
+
+  #[test_only]
+  friend restaking::delegation_tests;
 }

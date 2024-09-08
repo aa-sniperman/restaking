@@ -6,10 +6,17 @@ module restaking::test_helpers {
   use aptos_framework::primary_fungible_store;
   use std::option;
   use std::string;
+
   use restaking::package_manager;
+  use restaking::staker_manager;
+  use restaking::operator_manager;
+  use restaking::slasher;
   
   public fun set_up(deployer: &signer, ra: &signer){
     package_manager::initialize_for_test(deployer, ra);
+    staker_manager::initialize();
+    operator_manager::initialize();
+    slasher::initialize();
   }
 
   public fun create_fungible_asset_and_mint(creator: &signer, name: vector<u8>, amount: u64): FungibleAsset {

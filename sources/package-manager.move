@@ -2,7 +2,7 @@ module restaking::package_manager {
     use aptos_framework::event;
     use aptos_framework::account::{Self, SignerCapability};
     use aptos_framework::resource_account;
-    use aptos_std::simple_map::{Self, SimpleMap};
+    use aptos_std::smart_table::{Self, SmartTable};
     use std::string::{Self, String};
     use std::signer;
 
@@ -25,7 +25,7 @@ module restaking::package_manager {
         /// Required to obtain the resource account signer.
         signer_cap: SignerCapability,
         /// Track the addresses created by the modules in this package.
-        addresses: SimpleMap<String, address>,
+        addresses: SmartTable<String, address>,
     }
 
     #[event]
@@ -39,7 +39,7 @@ module restaking::package_manager {
     fun init_module(staking_signer: &signer) acquires PermissionConfig {
         let signer_cap = resource_account::retrieve_resource_account_cap(staking_signer, @deployer);
         move_to(staking_signer, PermissionConfig {
-            addresses: simple_map::new<String, address>(),
+            addresses: smart_table::new<String, address>(),
             signer_cap,
         });
         add_address(string::utf8(OWNER_NAME), @deployer);
@@ -54,7 +54,7 @@ module restaking::package_manager {
     /// Can be called by friended modules to keep track of a system address.
     public(friend) fun add_address(name: String, object: address) acquires PermissionConfig {
         let addresses = &mut borrow_global_mut<PermissionConfig>(@restaking).addresses;
-        simple_map::upsert(addresses, name, object);
+        smart_table::upsert(addresses, name, object);
     }
 
     public entry fun set_owner(owner: &signer, new_owner: address) acquires PermissionConfig{
@@ -71,12 +71,12 @@ module restaking::package_manager {
         assert!(owner == get_address(string::utf8(OWNER_NAME)), ENOT_OWNER);
     }
     public fun address_exists(name: String): bool acquires PermissionConfig {
-        simple_map::contains_key(&safe_permission_config().addresses, &name)
+        smart_table::contains(&safe_permission_config().addresses, name)
     }
 
     public fun get_address(name: String): address acquires PermissionConfig {
         let addresses = &borrow_global<PermissionConfig>(@restaking).addresses;
-        *simple_map::borrow(addresses, &name)
+        *smart_table::borrow(addresses, name)
     }
 
     inline fun safe_permission_config(): &PermissionConfig acquires PermissionConfig {
@@ -96,8 +96,8 @@ module restaking::package_manager {
 
             resource_account::create_resource_account(deployer, vector::empty<u8>(), vector::empty<u8>());
             
-            let addresses = simple_map::new<String, address>();
-            simple_map::add(&mut addresses, string::utf8(OWNER_NAME), deployer_addr);
+            let addresses = smart_table::new<String, address>();
+            smart_table::add(&mut addresses, string::utf8(OWNER_NAME), deployer_addr);
             move_to(resource_account, PermissionConfig {
                 addresses,
                 signer_cap: account::create_test_signer_cap(resource_account_addr),

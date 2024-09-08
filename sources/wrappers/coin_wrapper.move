@@ -22,7 +22,7 @@ module restaking::coin_wrapper {
     use aptos_framework::fungible_asset::{Self, BurnRef, FungibleAsset, Metadata, MintRef};
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
-    use aptos_std::simple_map::{Self, SimpleMap};
+    use aptos_std::smart_table::{Self, SmartTable};
     use aptos_std::string_utils;
     use aptos_std::type_info;
     use std::string::{Self, String};
@@ -51,9 +51,9 @@ module restaking::coin_wrapper {
         signer_cap: SignerCapability,
         // Map from an original coin type (represented as strings such as "0x1::aptos_coin::AptosCoin") to the
         // corresponding fungible asset wrapper.
-        coin_to_fungible_asset: SimpleMap<String, FungibleAssetData>,
+        coin_to_fungible_asset: SmartTable<String, FungibleAssetData>,
         // Map from a fungible asset wrapper to the original coin type.
-        fungible_asset_to_coin: SimpleMap<Object<Metadata>, String>,
+        fungible_asset_to_coin: SmartTable<Object<Metadata>, String>,
     }
 
     /// Create the coin wrapper account to host all the deposited coins.
@@ -68,8 +68,8 @@ module restaking::coin_wrapper {
         package_manager::add_address(string::utf8(COIN_WRAPPER_NAME), signer::address_of(&coin_wrapper_signer));
         move_to(&coin_wrapper_signer, WrapperAccount {
             signer_cap,
-            coin_to_fungible_asset: simple_map::new(),
-            fungible_asset_to_coin: simple_map::new(),
+            coin_to_fungible_asset: smart_table::new(),
+            fungible_asset_to_coin: smart_table::new(),
         });
     }
 
@@ -89,19 +89,19 @@ module restaking::coin_wrapper {
     /// call has been made for that CoinType.
     public fun is_supported<CoinType>(): bool acquires WrapperAccount {
         let coin_type = type_info::type_name<CoinType>();
-        simple_map::contains_key(&wrapper_account().coin_to_fungible_asset, &coin_type)
+        smart_table::contains(&wrapper_account().coin_to_fungible_asset, coin_type)
     }
 
     #[view]
     /// Return true if the given fungible asset is a wrapper fungible asset.
     public fun is_wrapper(metadata: Object<Metadata>): bool acquires WrapperAccount {
-        simple_map::contains_key(&wrapper_account().fungible_asset_to_coin, &metadata)
+        smart_table::contains(&wrapper_account().fungible_asset_to_coin, metadata)
     }
 
     #[view]
     /// Return the original CoinType for a specific wrapper fungible asset. This errors out if there's no such wrapper.
     public fun get_coin_type(metadata: Object<Metadata>): String acquires WrapperAccount {
-        *simple_map::borrow(&wrapper_account().fungible_asset_to_coin, &metadata)
+        *smart_table::borrow(&wrapper_account().fungible_asset_to_coin, metadata)
     }
 
     #[view]
@@ -163,7 +163,7 @@ module restaking::coin_wrapper {
         let wrapper_account = mut_wrapper_account();
         let coin_to_fungible_asset = &mut wrapper_account.coin_to_fungible_asset;
         let wrapper_signer = &account::create_signer_with_capability(&wrapper_account.signer_cap);
-        if (!simple_map::contains_key(coin_to_fungible_asset, &coin_type)) {
+        if (!smart_table::contains(coin_to_fungible_asset, coin_type)) {
             let metadata_constructor_ref = &object::create_named_object(wrapper_signer, *string::bytes(&coin_type));
             primary_fungible_store::create_primary_store_enabled_fungible_asset(
                 metadata_constructor_ref,
@@ -178,19 +178,19 @@ module restaking::coin_wrapper {
             let mint_ref = fungible_asset::generate_mint_ref(metadata_constructor_ref);
             let burn_ref = fungible_asset::generate_burn_ref(metadata_constructor_ref);
             let metadata = object::object_from_constructor_ref<Metadata>(metadata_constructor_ref);
-            simple_map::add(coin_to_fungible_asset, coin_type, FungibleAssetData {
+            smart_table::add(coin_to_fungible_asset, coin_type, FungibleAssetData {
                 metadata,
                 mint_ref,
                 burn_ref,
             });
-            simple_map::add(&mut wrapper_account.fungible_asset_to_coin, metadata, coin_type);
+            smart_table::add(&mut wrapper_account.fungible_asset_to_coin, metadata, coin_type);
         };
-        simple_map::borrow(coin_to_fungible_asset, &coin_type).metadata
+        smart_table::borrow(coin_to_fungible_asset, coin_type).metadata
     }
 
     inline fun fungible_asset_data<CoinType>(): &FungibleAssetData acquires WrapperAccount {
         let coin_type = type_info::type_name<CoinType>();
-        simple_map::borrow(&wrapper_account().coin_to_fungible_asset, &coin_type)
+        smart_table::borrow(&wrapper_account().coin_to_fungible_asset, coin_type)
     }
 
     inline fun wrapper_account(): &WrapperAccount acquires WrapperAccount {

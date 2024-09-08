@@ -5,7 +5,7 @@ module restaking::operator_manager {
   };
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
-  use aptos_std::simple_map::{Self, SimpleMap};
+  use aptos_std::smart_table::{Self, SmartTable};
   use std::string;
   use std::bcs;
   use std::vector;
@@ -30,8 +30,8 @@ module restaking::operator_manager {
 
 
   struct OperatorStore has key {
-    nonnormalized_shares: SimpleMap<Object<Metadata>, u128>,
-    salt_spent: SimpleMap<u256, bool>,
+    nonnormalized_shares: SmartTable<Object<Metadata>, u128>,
+    salt_spent: SmartTable<u256, bool>,
   }
 
   struct OperatorManagerConfigs has key {
@@ -82,7 +82,7 @@ module restaking::operator_manager {
       };
 
       let store = operator_store(operator);
-      let nonnormalized_shares = *simple_map::borrow(&store.nonnormalized_shares, &token);
+      let nonnormalized_shares = *smart_table::borrow_with_default(&store.nonnormalized_shares, token, &0);
       let scaling_factor = slasher::share_scaling_factor(operator, token);
       slashing_accounting::normalize(nonnormalized_shares, scaling_factor)
     }
@@ -102,13 +102,9 @@ module restaking::operator_manager {
       let i = 0;
       while(i < tokens_length){
         let token = *vector::borrow(&tokens, i);
-        if(simple_map::contains_key(&store.nonnormalized_shares, &token)){
-          let nonnormalized_shares = *simple_map::borrow(&store.nonnormalized_shares, &token);
-          let scaling_factor = slasher::share_scaling_factor(operator, token);
-          vector::push_back(&mut shares, slashing_accounting::normalize(nonnormalized_shares, scaling_factor));
-        }else {
-          vector::push_back(&mut shares, 0);
-        };
+        let nonnormalized_shares = *smart_table::borrow_with_default(&store.nonnormalized_shares, token, &0);
+        let scaling_factor = slasher::share_scaling_factor(operator, token);
+        vector::push_back(&mut shares, slashing_accounting::normalize(nonnormalized_shares, scaling_factor));
         i = i + 1;
       };
       shares
@@ -122,7 +118,7 @@ module restaking::operator_manager {
 
   #[view]
   public fun operator_store_exists(operator: address): bool {
-    exists<OperatorStore>(operator)
+    exists<OperatorStore>(operator_store_address(operator))
   }
 
   public(friend) fun increase_operator_shares(operator: address, staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires OperatorStore, OperatorManagerConfigs {
@@ -130,11 +126,11 @@ module restaking::operator_manager {
 
     let store = mut_operator_store(operator);
 
-    if(simple_map::contains_key(&store.nonnormalized_shares, &token)){
-      let current_shares = simple_map::borrow_mut(&mut store.nonnormalized_shares, &token);
+    if(smart_table::contains(&store.nonnormalized_shares, token)){
+      let current_shares = smart_table::borrow_mut(&mut store.nonnormalized_shares, token);
       *current_shares = *current_shares + nonnormalized_shares;
     }else {
-      simple_map::add(&mut store.nonnormalized_shares, token, nonnormalized_shares);
+      smart_table::add(&mut store.nonnormalized_shares, token, nonnormalized_shares);
     };
 
     event::emit(OperatorShareIncreased {
@@ -150,11 +146,11 @@ module restaking::operator_manager {
     ensure_operator_store(operator);
    let store = mut_operator_store(operator);
 
-    if(simple_map::contains_key(&store.nonnormalized_shares, &token)){
-      let current_shares = simple_map::borrow_mut(&mut store.nonnormalized_shares, &token);
+    if(smart_table::contains(&store.nonnormalized_shares, token)){
+      let current_shares = smart_table::borrow_mut(&mut store.nonnormalized_shares, token);
       *current_shares = *current_shares - nonnormalized_shares;
     }else {
-      simple_map::add(&mut store.nonnormalized_shares, token, 0);
+      smart_table::add(&mut store.nonnormalized_shares, token, 0);
     };
 
     event::emit(OperatorShareDecreased {
@@ -170,8 +166,8 @@ module restaking::operator_manager {
     let ctor = &object::create_named_object(operator_manager_signer, operator_store_seeds(operator));
     let operator_store_signer = object::generate_signer(ctor);
     move_to(&operator_store_signer, OperatorStore {
-      nonnormalized_shares: simple_map::new(),
-      salt_spent: simple_map::new(),
+      nonnormalized_shares: smart_table::new(),
+      salt_spent: smart_table::new(),
     });
   }
 
@@ -202,4 +198,7 @@ module restaking::operator_manager {
   inline fun mut_operator_store(operator: address): &mut OperatorStore acquires OperatorStore {
     borrow_global_mut<OperatorStore>(operator_store_address(operator))
   }
+
+  #[test_only]
+  friend restaking::delegation_tests;
 }

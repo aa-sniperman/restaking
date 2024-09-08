@@ -6,7 +6,7 @@ module restaking::earner_manager{
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
 
-  use aptos_std::simple_map::{Self, SimpleMap};
+  use aptos_std::smart_table::{Self, SmartTable};
   use std::string;
   use std::bcs;
   use std::vector;
@@ -21,7 +21,7 @@ module restaking::earner_manager{
 
   struct EarnerStore has key {
     claimer: address,
-    cummulative_claimed: SimpleMap<Object<Metadata>, u64>,
+    cummulative_claimed: SmartTable<Object<Metadata>, u64>,
   }
 
   struct EarnerManagerConfigs has key{
@@ -57,7 +57,7 @@ module restaking::earner_manager{
 
   #[view]
   public fun claimer_of(earner: address): address acquires EarnerStore{
-    if(exists<EarnerStore>(earner)){
+    if(earner_store_exists(earner)){
       return earner_store(earner).claimer
     };
     earner
@@ -65,11 +65,9 @@ module restaking::earner_manager{
 
   #[view]
   public fun cummulative_claimed(earner: address, token: Object<Metadata>): u64 acquires EarnerStore{
-    if(exists<EarnerStore>(earner)){
+    if(earner_store_exists(earner)){
       let store = earner_store(earner);
-      if(simple_map::contains_key(&store.cummulative_claimed, &token)){
-        return *simple_map::borrow(&store.cummulative_claimed, &token)
-      };
+        return *smart_table::borrow_with_default(&store.cummulative_claimed, token, &0)
     };
     0
   }
@@ -92,12 +90,12 @@ module restaking::earner_manager{
   public(friend) fun set_cummulative_claimed(earner: address, token: Object<Metadata>, value: u64) acquires EarnerStore, EarnerManagerConfigs{
     ensure_earner_store(earner);
     let store = mut_earner_store(earner);
-    simple_map::upsert(&mut store.cummulative_claimed, token, value);
+    smart_table::upsert(&mut store.cummulative_claimed, token, value);
   }
 
   
   fun ensure_earner_store(earner: address) acquires EarnerManagerConfigs{
-    if(!exists<EarnerStore>(earner)){
+    if(!earner_store_exists(earner)){
       create_earner_store(earner);
     }
   }
@@ -108,10 +106,14 @@ module restaking::earner_manager{
     let earner_store_signer = object::generate_signer(ctor);
     move_to(&earner_store_signer, EarnerStore {
       claimer: @0x0,
-      cummulative_claimed: simple_map::new(),
+      cummulative_claimed: smart_table::new(),
     });
   }
 
+  #[view]
+  public fun earner_store_exists(earner: address): bool{
+    exists<EarnerStore>(earner_store_address(earner))
+  }
   inline fun earner_store_address(earner: address): address {
     object::create_object_address(&earner_manager_address(), earner_store_seeds(earner))
   }

@@ -4,7 +4,7 @@ module restaking::withdrawal {
   use aptos_framework::object::{Object};
   use aptos_framework::account::{Self, SignerCapability};
   use aptos_framework::timestamp;
-  use aptos_std::simple_map::{Self, SimpleMap};
+  use aptos_std::smart_table::{Self, SmartTable};
   use aptos_std::aptos_hash;
   use std::string;
 
@@ -55,8 +55,8 @@ module restaking::withdrawal {
   struct WithdrawalConfigs has key {
     signer_cap: SignerCapability,
     min_withdrawal_delay: u64,
-    pending_withdrawals: SimpleMap<u256, PendingWithdrawalData>,
-    token_withdrawal_delay: SimpleMap<Object<Metadata>, u64>,
+    pending_withdrawals: SmartTable<u256, PendingWithdrawalData>,
+    token_withdrawal_delay: SmartTable<Object<Metadata>, u64>,
   }
 
   #[event]
@@ -94,8 +94,8 @@ module restaking::withdrawal {
         move_to(&withdrawal_signer, WithdrawalConfigs {
             signer_cap,
             min_withdrawal_delay: 24 * 3600, // 1 day
-            pending_withdrawals: simple_map::new(),
-            token_withdrawal_delay: simple_map::new()
+            pending_withdrawals: smart_table::new(),
+            token_withdrawal_delay: smart_table::new()
         });
     }
 
@@ -157,7 +157,7 @@ module restaking::withdrawal {
 
     let withdrawal_root = withdrawal_root(&withdrawal);
     let configs = mut_withdrawal_configs();
-    simple_map::upsert(&mut configs.pending_withdrawals, withdrawal_root, PendingWithdrawalData {
+    smart_table::upsert(&mut configs.pending_withdrawals, withdrawal_root, PendingWithdrawalData {
       is_pending: true,
       creation_epoch: epoch::current_epoch()
     });
@@ -182,13 +182,13 @@ module restaking::withdrawal {
     let withdrawal_root = withdrawal_root(&withdrawal);
     let configs = mut_withdrawal_configs();
 
-    let pending_withdrawal_data = simple_map::borrow(&configs.pending_withdrawals, &withdrawal_root);
+    let pending_withdrawal_data = smart_table::borrow(&configs.pending_withdrawals, withdrawal_root);
     let end_of_slashability_epoch = epoch::end_of_slashability_epoch(pending_withdrawal_data.creation_epoch);
     
     assert!(epoch::current_epoch() > end_of_slashability_epoch, EWITHDRAWAL_STILL_SLASHABLE);
     assert!(pending_withdrawal_data.is_pending == true, EWITHDRAWAL_NOT_PENDING);
 
-    simple_map::remove(&mut configs.pending_withdrawals, &withdrawal_root);
+    smart_table::remove(&mut configs.pending_withdrawals, withdrawal_root);
 
 
     let now = timestamp::now_seconds();
@@ -196,14 +196,14 @@ module restaking::withdrawal {
 
     let tokens_length = vector::length(&withdrawal.tokens);
 
-    simple_map::remove(&mut configs.pending_withdrawals, &withdrawal_root);
+    smart_table::remove(&mut configs.pending_withdrawals, withdrawal_root);
 
     let operator = staker_manager::delegate_of(withdrawal.staker);
     let idx = 0;
 
     while(idx < tokens_length){
       let token = *vector::borrow(&withdrawal.tokens, idx);
-      let withdrawal_delay = *simple_map::borrow(&configs.token_withdrawal_delay, &token);
+      let withdrawal_delay = *smart_table::borrow_with_default(&configs.token_withdrawal_delay, token, &0);
       assert!(withdrawal.start_time + withdrawal_delay <= now, EWITHDRAWAL_DELAY_NOT_PASSED_YET);
       let nonnormalized_shares = *vector::borrow(&withdrawal.nonnormalized_shares, idx);
 
@@ -241,12 +241,10 @@ module restaking::withdrawal {
 
     let idx = 0;
     while(idx < tokens_length){
-      let token = vector::borrow(&tokens, idx);
-      if(simple_map::contains_key(&configs.token_withdrawal_delay, token)){
-        let token_withdrawal_delay = *simple_map::borrow(&configs.token_withdrawal_delay, token);
-        if(withdrawal_delay < token_withdrawal_delay){
-          withdrawal_delay = token_withdrawal_delay;
-        }
+      let token = *vector::borrow(&tokens, idx);
+      let token_withdrawal_delay = *smart_table::borrow_with_default(&configs.token_withdrawal_delay, token, &0);
+      if(withdrawal_delay < token_withdrawal_delay){
+        withdrawal_delay = token_withdrawal_delay;
       };
       idx = idx + 1;
     };
@@ -288,6 +286,6 @@ module restaking::withdrawal {
       token_withdrawal_delay: delay
     });
     let configs = mut_withdrawal_configs();
-    simple_map::upsert(&mut configs.token_withdrawal_delay, token, delay);
+    smart_table::upsert(&mut configs.token_withdrawal_delay, token, delay);
   }
 }

@@ -6,7 +6,7 @@ module restaking::slasher {
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
 
-  use aptos_std::simple_map::{Self, SimpleMap};
+  use aptos_std::smart_table::{Self, SmartTable};
   use aptos_std::smart_vector::{Self, SmartVector};
 
   use std::string;
@@ -36,7 +36,7 @@ module restaking::slasher {
   }
   struct OperatorSlashingStore has key {
     slashing_request_ids: SlashingRequestIds,
-    slashing_requests: SimpleMap<u64, SlashingRequest>,
+    slashing_requests: SmartTable<u64, SlashingRequest>,
     share_scaling_factor: u64,
     slashed_epoch_history: SmartVector<u64>,
   }
@@ -72,6 +72,14 @@ module restaking::slasher {
     package_manager::address_exists(string::utf8(SLASHER_NAME))
   }
 
+  #[view]
+  public fun operator_slasher_store_exists(
+    operator: address,
+    token: Object<Metadata>,
+  ): bool{
+    exists<OperatorSlashingStore>(operator_slashing_store_address(operator, token))
+  }
+
   public entry fun execute_slashing(
     operator: address,
     tokens: vector<Object<Metadata>>,
@@ -87,7 +95,7 @@ module restaking::slasher {
     epoch: u64
   ) acquires OperatorSlashingStore {
     let operator_slashing_store = mut_operator_slashing_store(operator, token);
-    let request = simple_map::borrow_mut(&mut operator_slashing_store.slashing_requests, &epoch);
+    let request = smart_table::borrow_mut(&mut operator_slashing_store.slashing_requests, epoch);
     assert!(request.id == operator_slashing_store.slashing_request_ids.last_executed + 1, EEXCECUTED_SLASHINGS_NOT_IN_ORDER);
     operator_slashing_store.slashing_request_ids.last_executed = request.id;
     if(request.slashing_rate > slashing_accounting::bips_factor_square()){
@@ -123,7 +131,7 @@ module restaking::slasher {
     if(found){
       can_withdraw = can_withdraw_internal(operator, token, lookup_epoch);
       let store = operator_slashing_store(operator, token);
-      scaling_factor = simple_map::borrow(&store.slashing_requests, &lookup_epoch).scaling_factor;
+      scaling_factor = smart_table::borrow(&store.slashing_requests, lookup_epoch).scaling_factor;
     };
     (can_withdraw, scaling_factor)
   }
@@ -166,7 +174,7 @@ module restaking::slasher {
     epoch: u64
   ): bool acquires OperatorSlashingStore {
     let store = operator_slashing_store(operator, token);
-    let id_at_epoch = simple_map::borrow(&store.slashing_requests, &epoch).id;
+    let id_at_epoch = smart_table::borrow(&store.slashing_requests, epoch).id;
     let last_executed_id = store.slashing_request_ids.last_executed;
     id_at_epoch <= last_executed_id
   }
@@ -180,7 +188,7 @@ module restaking::slasher {
         last_created: 0,
         last_executed: 0,
       },
-      slashing_requests: simple_map::new(),
+      slashing_requests: smart_table::new(),
       share_scaling_factor: 0,
       slashed_epoch_history: smart_vector::new(),
     });
@@ -188,6 +196,9 @@ module restaking::slasher {
 
   #[view]
   public fun share_scaling_factor(operator: address, token: Object<Metadata>): u64 acquires OperatorSlashingStore{
+    if(!operator_slasher_store_exists(operator, token)){
+      return slashing_accounting::share_conversion_scale()
+    };
     let store = operator_slashing_store(operator, token);
     let scaling_factor = store.share_scaling_factor;
     if(scaling_factor == 0){
@@ -224,5 +235,6 @@ module restaking::slasher {
     borrow_global_mut<OperatorSlashingStore>(operator_slashing_store_address(operator, token))
   }
 
-
+  #[test_only]
+  friend restaking::delegation_tests;
 }
