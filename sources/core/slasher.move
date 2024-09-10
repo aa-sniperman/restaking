@@ -23,6 +23,7 @@ module restaking::slasher {
 
   const EMIN_EXCECUTION_EPOCH_NOT_PASSED: u64 = 801;
   const EEXCECUTED_SLASHINGS_NOT_IN_ORDER: u64 = 802;
+  const ENOT_SLASHING_EXECUTOR: u64 = 803;
 
 
   struct SlashingRequestIds has drop, store{
@@ -31,7 +32,6 @@ module restaking::slasher {
   }
   struct SlashingRequest has copy, drop, store {
     id: u32,
-    slashing_rate: u64,
     scaling_factor: u64
   }
   struct OperatorSlashingStore has key {
@@ -42,7 +42,8 @@ module restaking::slasher {
   }
 
   struct SlasherConfigs has key {
-    signer_cap: SignerCapability
+    signer_cap: SignerCapability,
+    slashing_executor: address,
   }
 
   #[event]
@@ -50,8 +51,14 @@ module restaking::slasher {
     epoch: u64,
     operator: address,
     token: Object<Metadata>,
-    slashing_rate: u64,
   }
+
+  #[event]
+  struct SlashingExecutorUpdated has drop, store {
+    old_executor: address,
+    new_executor: address,
+  }
+
       /// Create the share account to host all the staker & operator shares.
   public entry fun initialize() {
     if (is_initialized()) {
@@ -64,6 +71,7 @@ module restaking::slasher {
     package_manager::add_address(string::utf8(SLASHER_NAME), signer::address_of(&slasher_signer));
     move_to(&slasher_signer, SlasherConfigs {
       signer_cap,
+      slashing_executor: @deployer
     });
   }
 
@@ -78,6 +86,41 @@ module restaking::slasher {
     token: Object<Metadata>,
   ): bool{
     exists<OperatorSlashingStore>(operator_slashing_store_address(operator, token))
+  }
+
+  public entry fun request_slashing(
+    sender: &signer,
+    operator: address,
+    tokens: vector<Object<Metadata>>,
+    epoch: u64,
+    scaling_factor: u64
+  ) acquires OperatorSlashingStore, SlasherConfigs {
+    let configs = mut_slasher_configs();
+    assert!(signer::address_of(sender) == configs.slashing_executor, ENOT_SLASHING_EXECUTOR);
+    vector::for_each(tokens, |token| request_slashing_for_a_token(
+      operator,
+      token,
+      epoch,
+      scaling_factor
+    ));
+  }
+
+  fun request_slashing_for_a_token(
+    operator: address,
+    token: Object<Metadata>,
+    epoch: u64,
+    scaling_factor: u64
+  ) acquires OperatorSlashingStore {
+    let slashing_store = mut_operator_slashing_store(operator, token);
+    if(!smart_table::contains(&slashing_store.slashing_requests, epoch)){
+      let new_request_id = slashing_store.slashing_request_ids.last_created;
+      let new_request = SlashingRequest {
+        id: new_request_id,
+        scaling_factor
+      };
+      smart_table::add(&mut slashing_store.slashing_requests, epoch, new_request);
+      slashing_store.slashing_request_ids.last_created = new_request_id + 1;
+    }
   }
 
   public entry fun execute_slashing(
@@ -95,27 +138,17 @@ module restaking::slasher {
     epoch: u64
   ) acquires OperatorSlashingStore {
     let operator_slashing_store = mut_operator_slashing_store(operator, token);
-    let request = smart_table::borrow_mut(&mut operator_slashing_store.slashing_requests, epoch);
+    let request = smart_table::borrow(&operator_slashing_store.slashing_requests, epoch);
     assert!(request.id == operator_slashing_store.slashing_request_ids.last_executed + 1, EEXCECUTED_SLASHINGS_NOT_IN_ORDER);
     operator_slashing_store.slashing_request_ids.last_executed = request.id;
-    if(request.slashing_rate > slashing_accounting::bips_factor_square()){
-      request.slashing_rate = slashing_accounting::bips_factor_square();
-    } else if(request.slashing_rate == 0){
-      return
-    };
 
-    let scaling_factor_before = operator_slashing_store.share_scaling_factor;
-    let scaling_factor_after = slashing_accounting::find_new_scaling_factor(scaling_factor_before, request.slashing_rate);
-
-    operator_slashing_store.share_scaling_factor = scaling_factor_after;
+    operator_slashing_store.share_scaling_factor = request.scaling_factor;
     smart_vector::push_back(&mut operator_slashing_store.slashed_epoch_history, epoch);
-    request.scaling_factor = scaling_factor_after;
 
     event::emit(SlashingExecuted {
       operator,
       epoch,
       token,
-      slashing_rate: request.slashing_rate
     });
   }
 
@@ -236,6 +269,21 @@ module restaking::slasher {
 
   inline fun mut_operator_slashing_store(operator: address, token: Object<Metadata>): &mut OperatorSlashingStore acquires OperatorSlashingStore {
     borrow_global_mut<OperatorSlashingStore>(operator_slashing_store_address(operator, token))
+  }
+
+  inline fun mut_slasher_configs(): &mut SlasherConfigs acquires SlasherConfigs{
+    borrow_global_mut<SlasherConfigs>(slasher_address())
+  }
+  // Operators
+  public entry fun set_slashing_executor(sender: &signer, new_executor: address) acquires SlasherConfigs {
+    let sender_addr = signer::address_of(sender);
+    let configs = mut_slasher_configs();
+    assert!(configs.slashing_executor == sender_addr, ENOT_SLASHING_EXECUTOR);
+    configs.slashing_executor = new_executor;
+    event::emit(SlashingExecutorUpdated {
+      old_executor: sender_addr,
+      new_executor
+    });
   }
 
   #[test_only]

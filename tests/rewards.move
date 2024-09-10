@@ -92,11 +92,22 @@ module restaking::rewards_tests {
 
   #[test(deployer = @0xcafe, staker = @0x34162865fa, claimer = @0x34162865fa, avs = @0xab12, ra=@0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5)]
   public fun test_submit_and_self_claim(deployer: &signer, ra: &signer, avs: &signer, staker: &signer, claimer: &signer){
-    submit_and_claim(deployer, ra, avs, staker, claimer);
+    test_helpers::set_up(deployer, ra);
+    let token = submit_and_claim(deployer, ra, avs, staker, claimer);
+    let cummulative_claimed = earner_manager::cummulative_claimed(signer::address_of(staker), token);
+    assert!(cummulative_claimed == 1000, 0);
   }
 
-  public fun submit_and_claim(deployer: &signer, ra: &signer, avs: &signer, staker: &signer, claimer: &signer){
+  #[test(deployer = @0xcafe, staker = @0x34162865fa, claimer = @0xc1ae, avs = @0xab12, ra=@0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5)]
+  public fun test_set_claimer_submit_and_claim(deployer: &signer, ra: &signer, avs: &signer, staker: &signer, claimer: &signer){
     test_helpers::set_up(deployer, ra);
+    earner_manager::set_claimer_for(staker, signer::address_of(claimer));
+    let token = submit_and_claim(deployer, ra, avs, staker, claimer);
+    let cummulative_claimed = earner_manager::cummulative_claimed(signer::address_of(staker), token);
+    assert!(cummulative_claimed == 1000, 0);
+  }
+
+  public fun submit_and_claim(deployer: &signer, ra: &signer, avs: &signer, staker: &signer, claimer: &signer): Object<Metadata>{
 
     // submit rewards
     let rewarded_amount = 1000;
@@ -180,6 +191,7 @@ module restaking::rewards_tests {
       vector[cummulative_earnings]
     );
 
+    rewarded_token
   }
 
   public fun create_avs_rewards_submission(
