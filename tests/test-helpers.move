@@ -16,6 +16,7 @@ module restaking::test_helpers {
   use restaking::package_manager;
   use restaking::staker_manager;
   use restaking::operator_manager;
+  use restaking::earner_manager;
   use restaking::slasher;
   use restaking::withdrawal;
   use restaking::rewards_coordinator;
@@ -29,6 +30,7 @@ module restaking::test_helpers {
     withdrawal::initialize();
     rewards_coordinator::initialize();
     avs_manager::initialize();
+    earner_manager::initialize();
 
     assert!(staker_manager::is_initialized(), 0);
     assert!(operator_manager::is_initialized(), 0);
@@ -36,6 +38,7 @@ module restaking::test_helpers {
     assert!(withdrawal::is_initialized(), 0);
     assert!(rewards_coordinator::is_initialized(), 0);
     assert!(avs_manager::is_initialized(), 0);
+    assert!(earner_manager::is_initialized(), 0);
   }
 
   public fun create_fungible_asset(creator: &signer, name: vector<u8>): ConstructorRef {
@@ -71,6 +74,21 @@ module restaking::test_helpers {
   }
 
   #[view]
+  public fun calculate_earner_leaf_hash(
+    earner: address,
+    earner_token_root: vector<u8>
+  ): vector<u8> {
+    let leaf_payload = vector<u8>[];
+    vector::append(&mut leaf_payload, bcs::to_bytes(&earner));
+    vector::append(&mut leaf_payload, bcs::to_bytes(&earner_token_root));
+
+    debug::print(&bcs::to_bytes(&earner));
+    debug::print(&bcs::to_bytes(&earner_token_root));
+    debug::print(&leaf_payload);
+    aptos_hash::keccak256(leaf_payload)
+  }
+
+  #[view]
   public fun hash2(left: vector<u8>, right: vector<u8>): vector<u8>{
     let payload = vector<u8>[];
     vector::append(&mut payload, left);
@@ -87,50 +105,5 @@ module restaking::test_helpers {
       idx = idx + 1;
     };
     leaf
-  }
-
-  #[view]
-  public fun calculate_next_layer(layer: vector<u8>): vector<u8>{
-    let next_layer = vector<u8>[];
-    let layer_length = vector::length(&layer) / 32;
-    let i = 0u64;
-    while(i < layer_length){
-      let left = vector::slice(&layer, i, i + 32);
-      let right = vector::slice(&layer, i + 32, i + 64);
-      vector::append(&mut next_layer, hash2(left, right));
-      i = i + 2;
-    };
-    next_layer
-  }
-
-  #[view]
-  public fun calculate_earner_leaf_hash(
-    earner: address,
-    earner_token_root: vector<u8>
-  ): vector<u8> {
-    let leaf_payload = vector<u8>[];
-    vector::append(&mut leaf_payload, bcs::to_bytes(&earner));
-    vector::append(&mut leaf_payload, bcs::to_bytes(&earner_token_root));
-
-    debug::print(&bcs::to_bytes(&earner));
-    debug::print(&bcs::to_bytes(&earner_token_root));
-    debug::print(&leaf_payload);
-    aptos_hash::keccak256(leaf_payload)
-  }
-
-  #[view]
-  public fun calculate_merkle_tree(leaves: vector<u8>, depth: u8){
-    let leaves_length: u64 = vector::length(&leaves);
-    assert!(leaves_length % 32 == 0, 0);
-    let full_length = 1u64 << depth;
-    assert!(leaves_length <= full_length, 0);
-    if(leaves_length < full_length){
-      let zero_leaf = zero_leaf();
-      while(vector::length(&leaves) < full_length){
-        vector::append(&mut leaves, zero_leaf);
-      };
-    }
-
-    
   }
 }

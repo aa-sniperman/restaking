@@ -3,6 +3,7 @@ module restaking::staker_manager {
   use aptos_framework::fungible_asset::{
     Self, FungibleAsset, Metadata,
   };
+  use aptos_framework::primary_fungible_store;
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
   use aptos_std::smart_table::{Self, SmartTable};
@@ -135,15 +136,15 @@ module restaking::staker_manager {
       };
     }
 
-    public(friend) fun deposit(staker: &signer, token: Object<Metadata>, asset: FungibleAsset) acquires StakerStore, StakerManagerConfigs{
+    public entry fun deposit(staker: &signer, token: Object<Metadata>, amount: u64) acquires StakerStore, StakerManagerConfigs{
+      
       let pool = staking_pool::ensure_staking_pool(token);
 
-      let store = staking_pool::token_store(pool);
+      let staker_store = primary_fungible_store::ensure_primary_store_exists(signer::address_of(staker), token);
+      let pool_store = staking_pool::token_store(pool);
 
-      let token = fungible_asset::metadata_from_asset(&asset);
-      let amount = fungible_asset::amount(&asset);
 
-      fungible_asset::deposit(store, asset);
+      fungible_asset::transfer(staker, staker_store, pool_store, amount);
       let nonnormalized_shares = staking_pool::deposit(pool, amount);
       
       let staker_addr = signer::address_of(staker);

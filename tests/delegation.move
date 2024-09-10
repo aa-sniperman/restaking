@@ -89,8 +89,8 @@ module restaking::delegation_tests {
     let deposit_amount = 1000;
     let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
     let token = fungible_asset::asset_metadata(&fa);
-
-    staker_manager::deposit(staker, token, fa);
+    
+    deposit_into_pool(staker, fa);
 
     let (staked_tokens, staked_shares) = staker_manager::staker_nonormalized_shares(staker_addr);
     assert!(vector::length(&staked_tokens) == 1, 0);
@@ -123,7 +123,7 @@ module restaking::delegation_tests {
     let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
     let token = fungible_asset::asset_metadata(&fa);
 
-    staker_manager::deposit(staker, token, fa);
+    deposit_into_pool(staker, fa);
 
     staker_manager::delegate(operator, operator_addr);
 
@@ -160,7 +160,7 @@ module restaking::delegation_tests {
     let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
     let token = fungible_asset::asset_metadata(&fa);
 
-    staker_manager::deposit(staker, token, fa);
+    deposit_into_pool(staker, fa);
 
     staker_manager::delegate(operator, operator_addr);
 
@@ -203,7 +203,7 @@ module restaking::delegation_tests {
     let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
     let token = fungible_asset::asset_metadata(&fa);
 
-    staker_manager::deposit(staker, token, fa);
+    deposit_into_pool(staker, fa);
 
     staker_manager::delegate(operator, operator_addr);
 
@@ -248,7 +248,7 @@ module restaking::delegation_tests {
     let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
     let token = fungible_asset::asset_metadata(&fa);
 
-    staker_manager::deposit(staker, token, fa);
+    deposit_into_pool(staker, fa);
 
     staker_manager::delegate(operator, operator_addr);
 
@@ -314,7 +314,7 @@ module restaking::delegation_tests {
     let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
     let token = fungible_asset::asset_metadata(&fa);
 
-    staker_manager::deposit(staker, token, fa);
+    deposit_into_pool(staker, fa);
 
     staker_manager::delegate(operator, operator_addr);
 
@@ -376,7 +376,7 @@ module restaking::delegation_tests {
     let fa = test_helpers::create_fungible_asset_and_mint(deployer, b"Token 1", deposit_amount);
     let token = fungible_asset::asset_metadata(&fa);
 
-    staker_manager::deposit(staker, token, fa);
+    deposit_into_pool(staker, fa);
 
     staker_manager::delegate(operator, operator_addr);
 
@@ -407,5 +407,13 @@ module restaking::delegation_tests {
 
     let operator_shares_after = operator_manager::operator_token_shares(operator_addr, token);
     assert!(operator_shares_after == 0, 0);
+  }
+
+  public fun deposit_into_pool(staker: &signer, fa: FungibleAsset){
+    let token = fungible_asset::asset_metadata(&fa);
+    let amount = fungible_asset::amount(&fa);
+    let staker_store = primary_fungible_store::ensure_primary_store_exists(signer::address_of(staker), token);
+    fungible_asset::deposit(staker_store, fa);
+    staker_manager::deposit(staker, token, amount);
   }
 }
