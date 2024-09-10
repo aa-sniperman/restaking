@@ -29,7 +29,7 @@ module restaking::merkle_tree {
     let proof_length: u64 = vector::length(&proof);
     assert!(proof_length % 32 == 0, EINVALID_PROOF_LENGTH);
     let computed_hash: vector<u8> = leaf;
-    let i: u64 = 32;
+    let i: u64 = 0;
     while(i < proof_length) {
       let sibling = vector::slice(&proof, i, i + 32);
       let hash_data = vector<u8>[];
@@ -44,7 +44,7 @@ module restaking::merkle_tree {
 
       index = index / 2;
       computed_hash = aptos_hash::keccak256(hash_data);
-      i = i + 1;
+      i = i + 32;
     };
 
     computed_hash

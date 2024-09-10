@@ -93,14 +93,51 @@ module restaking::avs_manager{
     package_manager::address_exists(string::utf8(AVS_MANAGER_NAME))
   }
 
-  public fun create_avs_rewards_for_all_submissions(sender: &signer, rewards_submissions: vector<RewardsSubmission>) acquires AVSStore, AVSManagerConfigs {
-    vector::for_each_ref(&rewards_submissions, |submission| create_avs_rewards_for_all_submission(sender, submission));
-  }
-  public fun create_avs_rewards_submissions(sender: &signer, rewards_submissions: vector<RewardsSubmission>) acquires AVSStore, AVSManagerConfigs {
-    vector::for_each_ref(&rewards_submissions, |submission| create_avs_rewards_submission(sender, submission));
+  public entry fun create_avs_rewards_for_all_submission(
+    sender: &signer,
+    tokens: vector<Object<Metadata>>,
+    multipliers: vector<u64>,
+    rewarded_token: Object<Metadata>,
+    rewarded_amount: u64,
+    start_time: u64,
+    duration: u64,
+  ) acquires AVSStore, AVSManagerConfigs {
+    create_avs_rewards_for_all_submission_internal(
+      sender,
+      &RewardsSubmission {
+        tokens,
+        multipliers,
+        rewarded_token,
+        rewarded_amount,
+        start_time,
+        duration
+      }
+    );
   }
 
-  fun create_avs_rewards_submission(sender: &signer, rewards_submission: &RewardsSubmission) acquires AVSStore, AVSManagerConfigs {
+  public entry fun create_avs_rewards_submission(
+    sender: &signer,
+    tokens: vector<Object<Metadata>>,
+    multipliers: vector<u64>,
+    rewarded_token: Object<Metadata>,
+    rewarded_amount: u64,
+    start_time: u64,
+    duration: u64,
+  ) acquires AVSStore, AVSManagerConfigs {
+    create_avs_rewards_submission_internal(
+      sender,
+      &RewardsSubmission {
+        tokens,
+        multipliers,
+        rewarded_token,
+        rewarded_amount,
+        start_time,
+        duration
+      }
+    );
+  }
+
+  fun create_avs_rewards_submission_internal(sender: &signer, rewards_submission: &RewardsSubmission) acquires AVSStore, AVSManagerConfigs {
     let avs = signer::address_of(sender);
     ensure_avs_store(avs);
     let store = mut_avs_store(avs);
@@ -125,7 +162,7 @@ module restaking::avs_manager{
     });
   }
 
-  fun create_avs_rewards_for_all_submission(sender: &signer, rewards_submission: &RewardsSubmission) acquires AVSStore, AVSManagerConfigs {
+  fun create_avs_rewards_for_all_submission_internal(sender: &signer, rewards_submission: &RewardsSubmission) acquires AVSStore, AVSManagerConfigs {
     let avs = signer::address_of(sender);
     ensure_avs_store(avs);
     let store = mut_avs_store(avs);
@@ -226,52 +263,6 @@ module restaking::avs_manager{
 
   inline fun mut_avs_store(avs: address): &mut AVSStore acquires AVSStore {
     borrow_global_mut<AVSStore>(avs_store_address(avs))
-  }
-
-  #[test_only]
-  public fun create_avs_rewards_submission_for_test(
-    sender: &signer,
-    tokens: vector<Object<Metadata>>,
-    multipliers: vector<u64>,
-    rewarded_token: Object<Metadata>,
-    rewarded_amount: u64,
-    start_time: u64,
-    duration: u64,
-  ) acquires AVSStore, AVSManagerConfigs {
-    create_avs_rewards_submission(
-      sender,
-      &RewardsSubmission {
-        tokens,
-        multipliers,
-        rewarded_token,
-        rewarded_amount,
-        start_time,
-        duration
-      }
-    );
-  }
-
-  #[test_only]
-  public fun create_avs_rewards_for_all_submission_for_test(
-    sender: &signer,
-    tokens: vector<Object<Metadata>>,
-    multipliers: vector<u64>,
-    rewarded_token: Object<Metadata>,
-    rewarded_amount: u64,
-    start_time: u64,
-    duration: u64,
-  ) acquires AVSStore, AVSManagerConfigs {
-    create_avs_rewards_for_all_submission(
-      sender,
-      &RewardsSubmission {
-        tokens,
-        multipliers,
-        rewarded_token,
-        rewarded_amount,
-        start_time,
-        duration
-      }
-    );
   }
 
   #[test_only]

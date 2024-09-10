@@ -37,7 +37,7 @@ module restaking::rewards_tests {
 
     fungible_asset::deposit(avs_token_store, rewarded_fa);
 
-    avs_manager::create_avs_rewards_submission_for_test(
+    avs_manager::create_avs_rewards_submission(
       avs,
       vector[staked_token],
       vector[1],
@@ -62,7 +62,7 @@ module restaking::rewards_tests {
 
     fungible_asset::deposit(avs_token_for_all_store, rewarded_for_all_fa);
 
-    avs_manager::create_avs_rewards_for_all_submission_for_test(
+    avs_manager::create_avs_rewards_for_all_submission(
       avs,
       vector[staked_token],
       vector[1],

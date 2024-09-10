@@ -43,7 +43,7 @@ module restaking::rewards_coordinator{
     earner_token_root: vector<u8>
   }
 
-  struct TokenTreeMerkleLeaf has copy, drop, store {
+  struct TokenMerkleTreeLeaf has copy, drop, store {
     token: Object<Metadata>,
     cummulative_earnings: u64
   }
@@ -55,7 +55,7 @@ module restaking::rewards_coordinator{
     earner_leaf: EarnerMerkleTreeLeaf,
     token_indices: vector<u32>,
     token_tree_proofs: vector<vector<u8>>,
-    token_leaves: vector<TokenTreeMerkleLeaf>,
+    token_leaves: vector<TokenMerkleTreeLeaf>,
   }
 
   struct DistributionRoot has copy, drop, store {
@@ -147,7 +147,73 @@ module restaking::rewards_coordinator{
         package_manager::address_exists(string::utf8(REWARDS_COORDINATOR_NAME))
     }
 
-  public fun process_claim(
+  public entry fun process_claim(
+    sender: &signer,
+    recipient: address,
+    root_index: u64,
+    earner_index: u32,
+    earner_tree_proof: vector<u8>,
+    earner: address,
+    earner_token_root: vector<u8>,
+    token_indices: vector<u32>,
+    token_tree_proofs: vector<vector<u8>>,
+    token_leaf_tokens: vector<Object<Metadata>>,
+    token_leaf_cummulative_earnings: vector<u64>,
+  ) acquires RewardsConfigs {
+
+    let claim = deserialize_claim(
+      root_index,
+      earner_index,
+      earner_tree_proof,
+      earner,
+      earner_token_root,
+      token_indices,
+      token_tree_proofs,
+      token_leaf_tokens,
+      token_leaf_cummulative_earnings
+    );
+    process_claim_internal(sender, claim, recipient);
+  }
+  
+  fun deserialize_claim(
+    root_index: u64,
+    earner_index: u32,
+    earner_tree_proof: vector<u8>,
+    earner: address,
+    earner_token_root: vector<u8>,
+    token_indices: vector<u32>,
+    token_tree_proofs: vector<vector<u8>>,
+    token_leaf_tokens: vector<Object<Metadata>>,
+    token_leaf_cummulative_earnings: vector<u64>,
+  ): RewardsMerkleClaim {
+    let earner_leaf = EarnerMerkleTreeLeaf {
+      earner,
+      earner_token_root
+    };
+    let token_leaves_length = vector::length(&token_leaf_tokens);
+    assert!(token_leaves_length == vector::length(&token_leaf_cummulative_earnings), ECLAIM_INPUT_LENGTH_MISMATCH);
+    let idx = 0;
+    let token_leaves = vector<TokenMerkleTreeLeaf>[];
+    while(idx < token_leaves_length){
+      vector::push_back(&mut token_leaves, TokenMerkleTreeLeaf {
+        token: *vector::borrow(&token_leaf_tokens, idx),
+        cummulative_earnings: *vector::borrow(&token_leaf_cummulative_earnings, idx)
+      });
+      idx = idx + 1;
+    };
+    let claim = RewardsMerkleClaim {
+      root_index,
+      earner_index,
+      earner_tree_proof,
+      earner_leaf,
+      token_indices,
+      token_tree_proofs,
+      token_leaves
+    };
+
+    claim
+  }
+  fun process_claim_internal(
     sender: &signer,
     claim: RewardsMerkleClaim,
     recipient: address
@@ -263,7 +329,7 @@ module restaking::rewards_coordinator{
     earner_token_root: vector<u8>,
     token_leaf_index: u32,
     token_proof: vector<u8>,
-    token_leaf: TokenTreeMerkleLeaf
+    token_leaf: TokenMerkleTreeLeaf
   ) {
     let proof_length = vector::length(&token_proof);
     assert!(token_leaf_index < (1 << ((proof_length / 32) as u8)), EINVALID_LEAF_INDEX);
@@ -305,6 +371,73 @@ module restaking::rewards_coordinator{
       old_rewards_updater: sender_addr,
       new_rewards_updater
     });
+  }
+
+  #[test_only]
+  #[view]
+  public fun calculate_token_leaf_hash(
+    token: Object<Metadata>,
+    cummulative_earnings: u64
+  ): vector<u8> {
+    aptos_hash::keccak256(bcs::to_bytes(&TokenMerkleTreeLeaf {
+      token,
+      cummulative_earnings
+    }))
+  }
+
+  #[test_only]
+  #[view]
+  public fun calculate_earner_leaf_hash(
+    earner: address,
+    earner_token_root: vector<u8>
+  ): vector<u8> {
+    aptos_hash::keccak256(bcs::to_bytes(&EarnerMerkleTreeLeaf {
+      earner,
+      earner_token_root
+    }))
+  }
+
+  #[test_only]
+  #[view]
+  public fun verify_claim_merkle_trees(
+    root: u256,
+    earner_index: u32,
+    earner_tree_proof: vector<u8>,
+    earner: address,
+    earner_token_root: vector<u8>,
+    token_indices: vector<u32>,
+    token_tree_proofs: vector<vector<u8>>,
+    token_leaf_tokens: vector<Object<Metadata>>,
+    token_leaf_cummulative_earnings: vector<u64>,
+  ){
+    let tokens_length = vector::length(&token_indices);
+    assert!(tokens_length == vector::length(&token_tree_proofs), ECLAIM_INPUT_LENGTH_MISMATCH);
+    assert!(tokens_length == vector::length(&token_leaf_tokens), ECLAIM_INPUT_LENGTH_MISMATCH);
+    
+    verify_earner_claim_proof(
+      math_utils::u256_to_bytes32(root),
+      earner_index,
+      earner_tree_proof,
+      EarnerMerkleTreeLeaf {
+        earner,
+        earner_token_root
+      }
+    );
+    let token_index = 0;
+    while(token_index < tokens_length){
+      let token = *vector::borrow(&token_leaf_tokens, token_index);
+      let cummulative_earnings = *vector::borrow(&token_leaf_cummulative_earnings, token_index);
+      verify_token_claim_proof(
+        earner_token_root,
+        *vector::borrow(&token_indices, token_index),
+        *vector::borrow(&token_tree_proofs, token_index),
+        TokenMerkleTreeLeaf {
+          token,
+          cummulative_earnings
+        }
+      );
+      token_index = token_index + 1;
+    };
   }
 
   #[test_only]
