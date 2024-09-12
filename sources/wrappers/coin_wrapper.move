@@ -30,6 +30,9 @@ module restaking::coin_wrapper {
     use std::signer;
     use restaking::package_manager;
 
+    friend restaking::staker_manager;
+    friend restaking::avs_manager;
+
     const COIN_WRAPPER_NAME: vector<u8> = b"COIN_WRAPPER";
 
     /// Stores the refs for a specific fungible asset wrapper for wrapping and unwrapping.
@@ -71,6 +74,17 @@ module restaking::coin_wrapper {
             coin_to_fungible_asset: smart_table::new(),
             fungible_asset_to_coin: smart_table::new(),
         });
+    }
+
+    public entry fun unwrap_entry<CoinType>(
+        sender: &signer,
+        token: Object<Metadata>,
+        amount: u64
+    ) acquires WrapperAccount{
+        let store = primary_fungible_store::ensure_primary_store_exists(signer::address_of(sender), token);
+        let fa = fungible_asset::withdraw(sender, store, amount);
+        let coins = unwrap<CoinType>(fa);
+        aptos_account::deposit_coins(signer::address_of(sender), coins);
     }
 
     #[view]

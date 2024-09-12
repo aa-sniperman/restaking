@@ -373,6 +373,28 @@ module restaking::rewards_coordinator{
     });
   }
 
+  public entry fun set_activation_delay(sender: &signer, new_activation_delay: u64) acquires RewardsConfigs {
+    package_manager::only_owner(signer::address_of(sender));
+    let configs = mut_rewards_configs();
+    let old_activation_delay = configs.activation_delay;
+    configs.activation_delay = new_activation_delay;
+    event::emit(ActivationDelaySet{
+      old_activation_delay,
+      new_activation_delay,
+    });
+  }
+
+  public entry fun set_global_commission_bips(sender: &signer, new_global_commisions_bips: u16) acquires RewardsConfigs {
+    package_manager::only_owner(signer::address_of(sender));
+    let configs = mut_rewards_configs();
+    let old_global_commisions_bips = configs.global_operator_commission_bips;
+    configs.global_operator_commission_bips = new_global_commisions_bips;
+    event::emit(GlobalCommissionBipsSet {
+      old_global_commisions_bips,
+      new_global_commisions_bips
+    })
+  }
+
   #[test_only]
   #[view]
   public fun calculate_token_leaf_hash(

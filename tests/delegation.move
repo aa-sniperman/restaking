@@ -414,6 +414,6 @@ module restaking::delegation_tests {
     let amount = fungible_asset::amount(&fa);
     let staker_store = primary_fungible_store::ensure_primary_store_exists(signer::address_of(staker), token);
     fungible_asset::deposit(staker_store, fa);
-    staker_manager::deposit(staker, token, amount);
+    staker_manager::stake_asset_entry(staker, token, amount);
   }
 }

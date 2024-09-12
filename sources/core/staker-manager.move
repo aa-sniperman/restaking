@@ -3,9 +3,10 @@ module restaking::staker_manager {
   use aptos_framework::fungible_asset::{
     Self, FungibleAsset, Metadata,
   };
-  use aptos_framework::primary_fungible_store;
+  use aptos_framework::coin;
   use aptos_framework::object::{Self, Object};
   use aptos_framework::account::{Self, SignerCapability};
+  use aptos_framework::primary_fungible_store;
   use aptos_std::smart_table::{Self, SmartTable};
   use aptos_std::smart_vector::{Self, SmartVector};
   use std::string;
@@ -18,6 +19,7 @@ module restaking::staker_manager {
   use restaking::staking_pool;
   use restaking::slasher;
   use restaking::slashing_accounting;
+  use restaking::coin_wrapper;
 
   friend restaking::withdrawal;
 
@@ -92,6 +94,24 @@ module restaking::staker_manager {
     package_manager::address_exists(string::utf8(STAKER_MANAGER_NAME))
   }
 
+  public entry fun stake_asset_entry(
+    staker: &signer,
+    token: Object<Metadata>,
+    amount: u64
+  ) acquires StakerStore, StakerManagerConfigs{
+    let store = primary_fungible_store::ensure_primary_store_exists(signer::address_of(staker), token);
+    let fa = fungible_asset::withdraw(staker, store, amount);
+    deposit(staker, fa)
+  }
+
+  public entry fun stake_coin_entry<CoinType>(
+    staker: &signer,
+    amount: u64
+  ) acquires StakerStore, StakerManagerConfigs{
+    let in = coin::withdraw<CoinType>(staker, amount);
+    let fa = coin_wrapper::wrap<CoinType>(in);
+    deposit(staker, fa)
+  }
 
     public(friend) fun add_shares(staker: address, token: Object<Metadata>, nonnormalized_shares: u128) acquires StakerStore, StakerManagerConfigs {
       ensure_staker_store(staker);
@@ -136,15 +156,17 @@ module restaking::staker_manager {
       };
     }
 
-    public entry fun deposit(staker: &signer, token: Object<Metadata>, amount: u64) acquires StakerStore, StakerManagerConfigs{
+    public(friend) fun deposit(staker: &signer, fa: FungibleAsset) acquires StakerStore, StakerManagerConfigs{
       
+      let token = fungible_asset::asset_metadata(&fa);
+      let amount = fungible_asset::amount(&fa);
+
       let pool = staking_pool::ensure_staking_pool(token);
 
-      let staker_store = primary_fungible_store::ensure_primary_store_exists(signer::address_of(staker), token);
       let pool_store = staking_pool::token_store(pool);
 
 
-      fungible_asset::transfer(staker, staker_store, pool_store, amount);
+      fungible_asset::deposit(pool_store, fa);
       let nonnormalized_shares = staking_pool::deposit(pool, amount);
       
       let staker_addr = signer::address_of(staker);
